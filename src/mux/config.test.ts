@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultConfig, loadConfig, planLayout } from "./config.ts";
+import { defaultConfig, loadConfig, namedTabs, planLayout, projectLayout } from "./config.ts";
 import { paneRects } from "./layout.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "qmux-config-"));
@@ -45,6 +45,61 @@ describe("config", () => {
     const { config, error } = await loadConfig(path);
     expect(config).toEqual(defaultConfig);
     expect(error).toBeDefined();
+  });
+
+  test("a layout can declare services, and projects can pick their own layout", async () => {
+    const path = writeConfig(
+      "services.ts",
+      `export default {
+        projects: { layout: "ide", layoutFor: { "dashboard": "dashboard" } },
+        layouts: {
+          ide: { row: [{}, {}] },
+          "dashboard": { services: [{ command: ["dashboard", "serve"], name: "server" }], row: [{ command: ["dashboard", "pane", "stories"] }, {}] },
+        },
+      };`,
+    );
+    const { config, error } = await loadConfig(path);
+    expect(error).toBeUndefined();
+    expect(config.layouts.ide).toEqual({ services: [], layout: { row: [{}, {}] } });
+    expect(config.layouts["dashboard"]!.services).toEqual([{ command: ["dashboard", "serve"], name: "server" }]);
+    expect(config.layouts["dashboard"]!.layout).toEqual({ row: [{ command: ["dashboard", "pane", "stories"] }, {}] });
+    expect(projectLayout(config, { name: "dashboard", dir: "/q" })).toBe(config.layouts["dashboard"]);
+    expect(projectLayout(config, { name: "penny", dir: "/p" })).toBe(config.layouts.ide);
+    expect(projectLayout(config, { name: "penny", dir: "/p", layout: "dashboard" })).toBe(config.layouts["dashboard"]);
+    expect(projectLayout(defaultConfig, { name: "penny", dir: "/p" })).toBeUndefined();
+  });
+
+  test("named tabs have their own layout and directory, and startup names them", async () => {
+    const path = writeConfig(
+      "tabs.ts",
+      `export default {
+        defaultCwd: "/srv",
+        layouts: { "dashboard": { row: [{}] } },
+        tabs: { "dashboard": { layout: "dashboard", cwd: "~/work/initech/dashboard" }, scratch: { layout: "dashboard" } },
+        startup: ["dashboard"],
+      };`,
+    );
+    const { config, error } = await loadConfig(path);
+    expect(error).toBeUndefined();
+    expect(config.startup).toEqual(["dashboard"]);
+    expect(namedTabs(config)).toEqual([
+      { name: "dashboard", dir: join(homedir(), "work/initech/dashboard"), layout: "dashboard" },
+      { name: "scratch", dir: "/srv", layout: "dashboard" },
+    ]);
+  });
+
+  test("bad services and unknown project layouts are errors", async () => {
+    for (const [name, source] of [
+      ["empty-service.ts", `export default { layouts: { a: { services: [{ command: [] }], row: [{}] } } };`],
+      ["service-name.ts", `export default { layouts: { a: { services: [{ command: ["x"], name: "a/b" }], row: [{}] } } };`],
+      ["layout-for.ts", `export default { projects: { layoutFor: { "dashboard": "nope" } } };`],
+      ["tab-layout.ts", `export default { tabs: { q: { layout: "nope" } } };`],
+      ["startup.ts", `export default { layouts: { a: { row: [{}] } }, tabs: { q: { layout: "a" } }, startup: ["nope"] };`],
+    ]) {
+      const { config, error } = await loadConfig(writeConfig(name!, source!));
+      expect(config).toEqual(defaultConfig);
+      expect(error).toBeDefined();
+    }
   });
 
   test("a config that throws falls back to defaults with an error", async () => {
