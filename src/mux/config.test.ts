@@ -54,14 +54,14 @@ describe("config", () => {
         projects: { layout: "ide", layoutFor: { "dashboard": "dashboard" } },
         layouts: {
           ide: { row: [{}, {}] },
-          "dashboard": { services: [{ command: ["dashboard", "serve"], name: "server" }], row: [{ command: ["dashboard", "pane", "stories"] }, {}] },
+          "dashboard": { jobs: [{ command: ["dashboard", "serve"], name: "server", dock: true }], row: [{ command: ["dashboard", "pane", "stories"] }, {}] },
         },
       };`,
     );
     const { config, error } = await loadConfig(path);
     expect(error).toBeUndefined();
-    expect(config.layouts.ide).toEqual({ services: [], layout: { row: [{}, {}] } });
-    expect(config.layouts["dashboard"]!.services).toEqual([{ command: ["dashboard", "serve"], name: "server" }]);
+    expect(config.layouts.ide).toEqual({ jobs: [], layout: { row: [{}, {}] } });
+    expect(config.layouts["dashboard"]!.jobs).toEqual([{ command: ["dashboard", "serve"], name: "server", dock: true }]);
     expect(config.layouts["dashboard"]!.layout).toEqual({ row: [{ command: ["dashboard", "pane", "stories"] }, {}] });
     expect(projectLayout(config, { name: "dashboard", dir: "/q" })).toBe(config.layouts["dashboard"]);
     expect(projectLayout(config, { name: "penny", dir: "/p" })).toBe(config.layouts.ide);
@@ -88,10 +88,11 @@ describe("config", () => {
     ]);
   });
 
-  test("bad services and unknown project layouts are errors", async () => {
+  test("bad jobs, old services and unknown project layouts are errors", async () => {
     for (const [name, source] of [
-      ["empty-service.ts", `export default { layouts: { a: { services: [{ command: [] }], row: [{}] } } };`],
-      ["service-name.ts", `export default { layouts: { a: { services: [{ command: ["x"], name: "a/b" }], row: [{}] } } };`],
+      ["empty-job.ts", `export default { layouts: { a: { jobs: [{ command: [] }], row: [{}] } } };`],
+      ["job-key.ts", `export default { layouts: { a: { jobs: [{ command: ["x"], docked: true }], row: [{}] } } };`],
+      ["old-services.ts", `export default { layouts: { a: { services: [{ command: ["x"] }], row: [{}] } } };`],
       ["layout-for.ts", `export default { projects: { layoutFor: { "dashboard": "nope" } } };`],
       ["tab-layout.ts", `export default { tabs: { q: { layout: "nope" } } };`],
       ["startup.ts", `export default { layouts: { a: { row: [{}] } }, tabs: { q: { layout: "a" } }, startup: ["nope"] };`],
