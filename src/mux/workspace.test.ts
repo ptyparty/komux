@@ -1052,6 +1052,23 @@ describe("Workspace", () => {
       expect(press(workspace, "alt+x")).toEqual([false]);
     });
 
+    test("Alt a shows an agent's question where you are, then peeks at unread replies", () => {
+      const { host, workspace } = ide({ now: 5 });
+      const [first, second] = paneIds(workspace.tab.root) as [number, number];
+      press(workspace, "ctrl+t", "c");
+      const merlot = workspace.tabs.find((tab) => tab.name === "merlot")!;
+      workspace.setAgentState(first, "done", "Which one?");
+      expect(workspace.openPopup(90, "Allow Write?", second)).toBe(true);
+      press(workspace, "alt+j", "alt+a");
+      expect([workspace.tab.name, workspace.popup?.id]).toEqual(["merlot", 90]);
+      expect(workspace.tab.focused).toBe(first);
+      workspace.popupExited(90);
+      workspace.active = 0;
+      press(workspace, "alt+a");
+      expect(host.peeked).toEqual([[first, "Claude · merlot", "Which one?"]]);
+      expect(workspace.tab).toBe(merlot);
+    });
+
     test("an agent's reply is unread until its pane is seen or peeked at", () => {
       const { host, workspace } = ide({ now: 5 });
       const agent = workspace.tab.focused;
