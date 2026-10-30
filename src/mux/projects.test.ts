@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { findProjects, rankProjects, resolveTarget, type Project } from "./projects.ts";
+import { findProjects, findRepo, rankProjects, resolveTarget, type Project } from "./projects.ts";
 
 const root = mkdtempSync(join(tmpdir(), "qmux-projects-"));
 for (const dir of ["acme/penny", "acme/merlot", "initech/orville", "stories/qmux", "stories/penny-auth"]) {
@@ -33,5 +33,12 @@ describe("projects", () => {
     expect(resolveTarget("merl", root, projects)?.dir).toBe(join(root, "acme/merlot"));
     expect(resolveTarget("./stories/qmux", root, projects)).toEqual({ name: "qmux", dir: join(root, "stories/qmux") });
     expect(resolveTarget("./missing", root, projects)).toBeUndefined();
+  });
+
+  test("finds a repo's clone by owner and name", () => {
+    const projects = findProjects([`${root}/*/*`]);
+    expect(findRepo("acme/penny", projects)?.dir).toBe(join(root, "acme/penny"));
+    expect(findRepo("Initech/Orville", projects)?.dir).toBe(join(root, "initech/orville"));
+    expect(findRepo("acme/penny-auth", projects)).toBeUndefined();
   });
 });
