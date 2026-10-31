@@ -177,11 +177,13 @@ When the terminal qmux is attached to supports kitty graphics, programs in panes
 
 ## Claude Code hooks
 
-`qmux hook` lets Claude Code sessions running in qmux panes report what they are doing. `qmux hooks` lists any that are missing from your settings and `qmux hooks --install` adds them, keeping the old file as `settings.json.qmux-backup`. `qmux claude` offers the same when it starts inside qmux. Point these hook events at it in `~/.claude/settings.json`: `UserPromptSubmit`, `Stop`, `SessionEnd`, `Notification` (matcher `*`) and `PermissionRequest` (matcher `*`, with a long timeout such as 3600 seconds). Use absolute paths, since hooks may not have `~/.bun/bin` on their PATH:
+`qmux hook` lets Claude Code sessions running in qmux panes report what they are doing. `qmux hooks` lists any that are missing from your settings and `qmux hooks --install` adds them, keeping the old file as `settings.json.qmux-backup`. `qmux claude` offers the same when it starts inside qmux. Point these hook events at it in `~/.claude/settings.json`: `UserPromptSubmit`, `Stop`, `SessionEnd`, `Notification` (matcher `*`) and `PermissionRequest` (matcher `*`, with a long timeout such as 3600 seconds):
 
 ```json
-{ "type": "command", "command": "/home/you/.bun/bin/bun /home/you/.bun/bin/qmux hook" }
+{ "type": "command", "command": "qmux hook" }
 ```
+
+The installer writes `qmux hook` when `qmux` and `bun` are on your PATH. Otherwise it writes absolute paths, such as `/home/you/.bun/bin/bun /home/you/.bun/bin/qmux hook`, since Claude may run hooks without `~/.bun/bin` on their PATH.
 
 With the hooks in place:
 

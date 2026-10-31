@@ -1,4 +1,4 @@
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, realpathSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { selfCommand, shellQuote, shellWords } from "../ask/hosts.ts";
@@ -30,8 +30,19 @@ export function settingsPaths(configDir = claudeConfigDir()): { user: string; lo
   return { user: join(configDir, "settings.json"), local: join(configDir, "settings.local.json") };
 }
 
-export function defaultHookCommand(): string {
-  return shellQuote([...selfCommand(), "hook"]);
+export function defaultHookCommand(which: (name: string) => string | null = Bun.which): string {
+  const self = selfCommand();
+  return onPath(self, which) ? "qmux hook" : shellQuote([...self, "hook"]);
+}
+
+function onPath(self: string[], which: (name: string) => string | null): boolean {
+  const found = which("qmux");
+  if (!found || (self.length > 1 && !which("bun"))) return false;
+  try {
+    return realpathSync(found) === realpathSync(self.at(-1)!);
+  } catch {
+    return false;
+  }
 }
 
 function isQmuxHook(command: string | undefined, wake: boolean): boolean {
