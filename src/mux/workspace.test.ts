@@ -708,6 +708,20 @@ describe("Workspace", () => {
     expect(workspace.openViewPopup(workspace.reservePaneId(), "Nowhere", 99)).toBeUndefined();
   });
 
+  test("raising a view popup by its key brings it to the front of its tab", () => {
+    const workspace = new Workspace(new FakeHost());
+    const compose = workspace.reservePaneId();
+    workspace.openViewPopup(compose, "Message Claude", 1, undefined, "compose:1");
+    const peek = workspace.reservePaneId();
+    workspace.openViewPopup(peek, "Peek", 1);
+    workspace.popups.unshift(workspace.popups.splice(1, 1)[0]!);
+    expect(workspace.popup?.id).toBe(peek);
+    expect(workspace.raiseViewPopup("compose:1")).toBe(true);
+    expect(workspace.popup?.id).toBe(compose);
+    expect(workspace.popups.filter((popup) => popup.key === "compose:1")).toHaveLength(1);
+    expect(workspace.raiseViewPopup("compose:2")).toBe(false);
+  });
+
   test("a popup belongs to the tab it opened over", () => {
     const workspace = new Workspace(new FakeHost());
     const view = workspace.reservePaneId();
