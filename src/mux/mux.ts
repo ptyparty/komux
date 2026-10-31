@@ -235,10 +235,15 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
         wakeClaude(nativeClaudes.get(target)!);
         return undefined;
       }
+      const key = `compose:${target}`;
+      if (workspace.raiseViewPopup(key)) {
+        refresh();
+        return context ? "A message box is already open; send or close it, then comment again" : undefined;
+      }
       const name = workspace.paneNames.get(target) ?? workspace.jobStatus(target)?.name ?? "Claude";
       const command = [...selfCommand(), "claude", "compose", "--socket", nativeClaudes.get(target)!, "--name", name];
       if (!context) {
-        openViewPopup(near, command, `Message ${name}`, { width: 70, height: 30 });
+        openViewPopup(near, command, `Message ${name}`, { width: 70, height: 30 }, false, key);
         return undefined;
       }
       const tabId = workspace.tabOf(near)?.id;
@@ -247,7 +252,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
       command.push(`--context-file=${file}`, `--label=${context.label}`);
       void Bun.write(file, context.text).then(
         () => {
-          openViewPopup(near, command, `Message ${name}`, { width: 70, height: 30 });
+          openViewPopup(near, command, `Message ${name}`, { width: 70, height: 30 }, false, key);
           refresh();
         },
         (error: Error) => {
@@ -306,12 +311,12 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     refresh();
   };
 
-  const openViewPopup = (near: PaneId, command: string[], title: string, size: PopupSize | undefined, frameless = false): PaneId | undefined => {
+  const openViewPopup = (near: PaneId, command: string[], title: string, size: PopupSize | undefined, frameless = false, key?: string): PaneId | undefined => {
     const tabId = workspace.tabOf(near)?.id;
     if (tabId === undefined) return undefined;
     const id = workspace.reservePaneId();
     spawnPane(id, host.cwd(near), command, (exited) => workspace.popupExited(exited), { holdOnFailure: true, tabId, frameless });
-    workspace.openViewPopup(id, title, near, size);
+    workspace.openViewPopup(id, title, near, size, key);
     refresh();
     return id;
   };

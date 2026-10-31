@@ -7,7 +7,7 @@ export type Drawer = { id: PaneId; height: number; open: boolean; zoomed: boolea
 export type Tab = { id: number; name: string; root: LayoutNode; layoutFocus: PaneId; zoomed: boolean; layout: LayoutSpec; layoutJobs: JobSpec[]; layoutRuns: Map<number, PaneId>; cwd?: string; drawerSpec?: DrawerSpec; drawer?: Drawer };
 
 export type PopupSize = { width: number; height: number };
-export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "view" | "job"; askingPane?: PaneId; size?: PopupSize; hidden?: boolean };
+export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "view" | "job"; askingPane?: PaneId; size?: PopupSize; hidden?: boolean; key?: string };
 
 export type JobState = "running" | "succeeded" | "failed";
 export type Job = { id: PaneId; tabId: number; name: string; command?: string[]; state: JobState; code?: number | null; started: number; finished?: number; seen: boolean; agent?: boolean; dock: boolean; layout?: boolean };
@@ -175,11 +175,21 @@ export class Workspace {
     return owner !== this.tab || (askingPane !== undefined && askingPane !== this.focused);
   }
 
-  openViewPopup(id: PaneId, title: string, near: PaneId, size?: PopupSize): number | undefined {
+  openViewPopup(id: PaneId, title: string, near: PaneId, size?: PopupSize, key?: string): number | undefined {
     const owner = this.tabOf(near);
     if (!owner) return undefined;
-    this.popups.push({ id, title, tabId: owner.id, kind: "view", size });
+    this.popups.push({ id, title, tabId: owner.id, kind: "view", size, key });
     return owner.id;
+  }
+
+  raiseViewPopup(key: string): boolean {
+    const index = this.popups.findIndex((popup) => popup.kind === "view" && popup.key === key);
+    if (index < 0) return false;
+    const [popup] = this.popups.splice(index, 1);
+    this.popups.unshift(popup!);
+    const tab = this.tabs.findIndex((candidate) => candidate.id === popup!.tabId);
+    if (tab >= 0) this.active = tab;
+    return true;
   }
 
   popupExited(id: PaneId): void {
