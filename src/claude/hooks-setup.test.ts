@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { shellWords } from "../ask/hosts.ts";
-import { installHooks, missingHooks, type Settings } from "./hooks-setup.ts";
+import { selfCommand, shellWords } from "../ask/hosts.ts";
+import { defaultHookCommand, installHooks, missingHooks, type Settings } from "./hooks-setup.ts";
 
 const ours = "/home/me/.bun/bin/bun /home/me/.bun/bin/qmux hook";
 const hook = (timeout: number) => [{ type: "command", command: ours, timeout }];
@@ -72,5 +72,13 @@ describe("qmux hooks in Claude settings", () => {
     expect(shellWords(`'/my tools/bun' "/my dir/cli.ts" hook --wake`)).toEqual(["/my tools/bun", "/my dir/cli.ts", "hook", "--wake"]);
     const quoted: Settings = installHooks({}, [], `'/my tools/bun' '/my dir/cli.ts' hook`);
     expect(missingHooks([quoted])).toEqual([]);
+  });
+
+  test("the hook runs plain qmux when that is the qmux on PATH", () => {
+    const self = selfCommand().at(-1)!;
+    expect(defaultHookCommand((name) => (name === "qmux" ? self : "/usr/bin/bun"))).toBe("qmux hook");
+    expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).toEndWith(" hook");
+    expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).not.toBe("qmux hook");
+    expect(defaultHookCommand(() => null)).not.toBe("qmux hook");
   });
 });
