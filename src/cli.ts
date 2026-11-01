@@ -221,7 +221,7 @@ async function peekCommand(args: string[]): Promise<void> {
   if (!source) throw new UsageError("qmux peek needs a spec file");
   const { showForm } = await import("./form/show.ts");
   const { peekSpec, pickSpec } = await import("./mux/peek.ts");
-  const list = values.list ? await readReplyList(source) : undefined;
+  const list = values.list || (await holdsReplyList(source)) ? await readReplyList(source) : undefined;
   let text = "";
   if (list) {
     for (;;) {
@@ -241,6 +241,12 @@ async function peekCommand(args: string[]): Promise<void> {
   const socket = process.env.QMUX_SOCKET;
   if (!text || !socket || !Number.isInteger(paneId)) return;
   await sendControl(socket, { method: "agent.prompt", params: { paneId, text } }).catch(() => undefined);
+}
+
+async function holdsReplyList(source: string): Promise<boolean> {
+  if (source === "-") return false;
+  const json: unknown = await Bun.file(source).json().catch(() => undefined);
+  return typeof json === "object" && json !== null && "replies" in json && !("elements" in json);
 }
 
 async function readReplyList(source: string): Promise<{ title: string; replies: ReplyChoice[] }> {
