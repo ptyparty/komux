@@ -15,7 +15,7 @@ export const controlRequest = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("agent.state"),
-    params: z.object({ paneId: z.number().int(), state: z.enum(["working", "waiting", "done", "clear"]), detail: z.string().optional(), sessionId: z.string().min(1).optional(), reply: z.string().optional() }),
+    params: z.object({ paneId: z.number().int(), state: z.enum(["working", "waiting", "done", "clear"]), detail: z.string().optional(), sessionId: z.string().min(1).optional(), reply: z.string().optional(), toast: z.enum(["brief", "none"]).optional() }),
   }),
   z.object({
     method: z.literal("pane.open"),
@@ -53,6 +53,7 @@ export const controlRequest = z.discriminatedUnion("method", [
 ]);
 
 export type ControlRequest = z.infer<typeof controlRequest>;
+export type QuietToast = NonNullable<Extract<ControlRequest, { method: "agent.state" }>["params"]["toast"]>;
 export type ControlResponse = { ok: true; result?: unknown } | { ok: false; error: string };
 export type ControlHandler = (request: ControlRequest) => ControlResponse | Promise<ControlResponse>;
 

@@ -4,7 +4,7 @@ import { ask, askOwner } from "../ask/ask.ts";
 import { selfCommand, shellQuote } from "../ask/hosts.ts";
 import { AskStore, type AskOwner, type AskStatus, type UnseenResult } from "../ask/store.ts";
 import type { FormSpec } from "../form/schema.ts";
-import { ControlError, sendControl, type ControlRequest } from "../mux/control.ts";
+import { ControlError, sendControl, type ControlRequest, type QuietToast } from "../mux/control.ts";
 import { attachedPaneEnv } from "./attached.ts";
 
 export type HookInput = { hook_event_name?: string; message?: string; notification_type?: string; last_assistant_message?: unknown; [key: string]: unknown };
@@ -12,7 +12,7 @@ export type HookInput = { hook_event_name?: string; message?: string; notificati
 type AgentStateRequest = Extract<ControlRequest, { method: "agent.state" }>;
 type AgentStateName = AgentStateRequest["params"]["state"];
 
-type StateUpdate = { state: AgentStateName; detail?: string; reply?: string; sessionId?: string };
+type StateUpdate = { state: AgentStateName; detail?: string; reply?: string; toast?: QuietToast; sessionId?: string };
 
 const maxReply = 8000;
 
@@ -21,8 +21,9 @@ export function stateForEvent(input: HookInput): StateUpdate | undefined {
     case "UserPromptSubmit":
       return { state: "working" };
     case "Stop": {
-      const reply = typeof input.last_assistant_message === "string" && input.last_assistant_message.trim() ? input.last_assistant_message.slice(0, maxReply) : undefined;
-      return { state: "done", reply };
+      const message = typeof input.last_assistant_message === "string" && input.last_assistant_message.trim() ? input.last_assistant_message : undefined;
+      const toast = message === undefined ? undefined : replyToast(message);
+      return { state: "done", reply: message?.slice(0, maxReply), ...(toast ? { toast } : {}) };
     }
     case "SessionEnd":
       return { state: "clear" };
@@ -35,6 +36,13 @@ export function stateForEvent(input: HookInput): StateUpdate | undefined {
     default:
       return undefined;
   }
+}
+
+export function replyToast(reply: string): QuietToast | undefined {
+  const last = reply.trimEnd().split("\n").at(-1)?.trim().replace(/^\*\*(.*)\*\*$/, "$1").trim().toUpperCase();
+  if (last === "QMUX: NO TOAST") return "none";
+  if (last === "QMUX: BRIEF TOAST") return "brief";
+  return undefined;
 }
 
 const needsYou = new Set(["permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"]);
@@ -395,9 +403,9 @@ async function reportSession(pane: AskOwner, sessionId: string): Promise<void> {
 }
 
 export async function reportState(pane: AskOwner, state: AgentStateName, update: Omit<StateUpdate, "state"> = {}): Promise<void> {
-  const { detail, sessionId, reply } = update;
+  const { detail, sessionId, reply, toast } = update;
   try {
-    await sendControl(pane.socket, { method: "agent.state", params: { paneId: pane.paneId, state, detail, sessionId, reply } }, 1000);
+    await sendControl(pane.socket, { method: "agent.state", params: { paneId: pane.paneId, state, detail, sessionId, reply, toast } }, 1000);
   } catch (error) {
     if (!(error instanceof ControlError)) throw error;
   }

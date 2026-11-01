@@ -1,6 +1,8 @@
 import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId } from "./layout.ts";
 import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type LayoutEntry, type LayoutSpec } from "./config.ts";
 import { keyName, lookup, type Command, type Key, type Mode } from "./keymap.ts";
+import type { QuietToast } from "./control.ts";
+import { replyChoices, type ReplyChoice } from "./peek.ts";
 import { expandHome, findRepo, looksLikePath, rankProjects, resolveTarget, type Project } from "./projects.ts";
 
 export type Drawer = { id: PaneId; height: number; open: boolean; zoomed: boolean };
@@ -11,8 +13,8 @@ export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "v
 
 export type JobState = "running" | "succeeded" | "failed";
 export type Job = { id: PaneId; tabId: number; name: string; command?: string[]; state: JobState; code?: number | null; started: number; finished?: number; seen: boolean; agent?: boolean; dock: boolean; layout?: boolean };
-export type Reply = { text: string; at: number; unread: boolean };
-export type Toast = { kind: "job"; job: Job; tab: Tab } | { kind: "reply"; id: PaneId; reply: Reply; tab: Tab };
+export type Reply = { text: string; at: number; unread: boolean; toastUntil?: number };
+export type Toast = { kind: "job"; job: Job; tab: Tab } | { kind: "reply"; id: PaneId; reply: Reply; tab: Tab; brief: boolean };
 
 export const agentStates = ["working", "waiting", "done", "failed"] as const;
 export type AgentState = (typeof agentStates)[number];
@@ -24,6 +26,7 @@ const commandUrgency: Record<CommandState, number> = { failed: 3, succeeded: 2, 
 const popupDelayMs = 1500;
 const toastMs = 5000;
 const keptFinishedJobs = 5;
+const keptReplies = 10;
 const drawerHeights = { initial: 40, step: 10, min: 20, max: 80 };
 
 export type Prompt = {
@@ -49,6 +52,7 @@ export interface PaneHost {
   shellCommand(text: string): string[];
   composeClaude(near: PaneId, candidates: PaneId[], context?: ComposeContext): string | undefined;
   peekReply(near: PaneId, title: string, text: string): void;
+  pickReply(near: PaneId, title: string, choices: ReplyChoice[]): void;
   tabClosed(tabId: number): void;
   projects(): Project[];
   destroy(id: PaneId): void;
@@ -80,7 +84,9 @@ export class Workspace {
   readonly paneNames = new Map<PaneId, string>();
   readonly popups: Popup[] = [];
   readonly agents = new Map<PaneId, AgentState>();
-  readonly replies = new Map<PaneId, Reply>();
+  readonly replies = new Map<PaneId, Reply[]>();
+  private readonly beforeTurn = new Map<PaneId, AgentState | undefined>();
+  private readonly quieted = new Set<PaneId>();
   readonly activities = new Map<PaneId, string>();
   readonly modes = new Map<PaneId, string>();
   readonly dormant = new Set<PaneId>();
@@ -217,22 +223,56 @@ export class Workspace {
     }
   }
 
-  setAgentState(id: PaneId, state: AgentState | undefined, reply?: string): boolean {
+  setAgentState(id: PaneId, state: AgentState | undefined, reply?: string, toast?: QuietToast): boolean {
     if (!this.tabOf(id)) return false;
     if (state === undefined) {
       this.agents.delete(id);
+      this.beforeTurn.delete(id);
+      this.quieted.delete(id);
       return false;
     }
     this.markAgent(id);
     if (state === "working" && this.hideOnReply.has(id)) this.popupExited(id);
     const watching = id === this.focused || this.popup?.id === id;
-    if (reply !== undefined) {
-      this.replies.delete(id);
-      this.replies.set(id, { text: reply, at: this.now(), unread: !watching });
+    const previous = this.agents.get(id);
+    const busy = previous === "working" || previous === "waiting";
+    if (state === "working") this.quieted.delete(id);
+    if (state === "working" && !busy) this.beforeTurn.set(id, previous);
+    if (state === "done" && reply === undefined && !toast && this.quieted.has(id)) return false;
+    if (toast && state === "done") {
+      if (toast === "brief" && reply !== undefined) this.keepReply(id, { text: reply, at: this.now(), unread: false, toastUntil: watching ? undefined : this.now() + toastMs });
+      const before = this.beforeTurn.has(id) ? this.beforeTurn.get(id) : busy ? undefined : previous;
+      this.beforeTurn.delete(id);
+      this.quieted.add(id);
+      if (before) this.agents.set(id, before);
+      else this.agents.delete(id);
+      return false;
     }
-    const changed = this.agents.get(id) !== state;
+    this.quieted.delete(id);
+    if (state !== "working" && state !== "waiting") this.beforeTurn.delete(id);
+    if (reply !== undefined) this.keepReply(id, { text: reply, at: this.now(), unread: !watching });
+    const changed = previous !== state;
     this.agents.set(id, state);
     return changed && !watching && state !== "working";
+  }
+
+  private keepReply(id: PaneId, reply: Reply): void {
+    const kept = [...(this.replies.get(id) ?? []), reply];
+    while (kept.length > keptReplies) {
+      const read = kept.findIndex((candidate) => !candidate.unread);
+      kept.splice(read >= 0 ? read : 0, 1);
+    }
+    this.replies.delete(id);
+    this.replies.set(id, kept);
+  }
+
+  latestReply(id: PaneId): Reply | undefined {
+    const kept = this.replies.get(id) ?? [];
+    return kept.findLast((reply) => reply.unread) ?? kept.at(-1);
+  }
+
+  private hasUnread(id: PaneId): boolean {
+    return this.replies.get(id)?.some((reply) => reply.unread) ?? false;
   }
 
   setCommandState(id: PaneId, state: CommandState): boolean {
@@ -261,25 +301,39 @@ export class Workspace {
       if (job.state === "succeeded" && now - job.finished! >= toastMs) return [];
       return [{ kind: "job", job, tab }];
     });
-    const replies = [...this.replies].flatMap(([id, reply]): Toast[] => {
+    const agents = [...this.replies].flatMap(([id, kept]) => {
       const tab = this.tabOf(id);
-      return tab && reply.unread ? [{ kind: "reply", id, reply, tab }] : [];
+      return tab ? [{ id, kept, tab }] : [];
     });
-    return [...jobs, ...replies];
+    const brief = agents.flatMap(({ id, kept, tab }) =>
+      kept.filter((reply) => reply.toastUntil !== undefined && reply.toastUntil > now).map((reply): Toast => ({ kind: "reply", id, reply, tab, brief: true })),
+    );
+    const unread = agents.flatMap(({ id, kept, tab }): Toast[] => {
+      const reply = kept.findLast((candidate) => candidate.unread);
+      return reply ? [{ kind: "reply", id, reply, tab, brief: false }] : [];
+    });
+    return [...jobs, ...brief, ...unread];
   }
 
   tabUnread(tab: Tab): boolean {
-    return this.tabPanes(tab).some((id) => this.replies.get(id)?.unread);
+    return this.tabPanes(tab).some((id) => this.hasUnread(id));
   }
 
   seeReply(id: PaneId): void {
-    const reply = this.replies.get(id);
-    if (reply) reply.unread = false;
+    for (const reply of this.replies.get(id) ?? []) {
+      reply.unread = false;
+      reply.toastUntil = undefined;
+    }
   }
 
   nextToastExpiry(): number | undefined {
-    const left = this.toasts()
-      .flatMap((toast) => (toast.kind === "job" && toast.job.state === "succeeded" ? [toast.job.finished! + toastMs - this.now()] : []));
+    const left = this.toasts().flatMap((toast) =>
+      toast.kind === "job" && toast.job.state === "succeeded"
+        ? [toast.job.finished! + toastMs - this.now()]
+        : toast.kind === "reply" && toast.brief
+          ? [toast.reply.toastUntil! - this.now()]
+          : [],
+    );
     return left.length > 0 ? Math.max(Math.min(...left), 0) : undefined;
   }
 
@@ -361,10 +415,13 @@ export class Workspace {
     if (index < 0) return;
     const tab = this.tabs[index]!;
     const name = job.name;
-    const [agent, reply] = [this.agents.get(job.id), this.replies.get(job.id)];
+    const [agent, reply, quiet] = [this.agents.get(job.id), this.replies.get(job.id), this.quieted.has(job.id)];
+    const before = this.beforeTurn.has(job.id) ? { state: this.beforeTurn.get(job.id) } : undefined;
     this.forgetJob(job.id);
     if (agent) this.agents.set(job.id, agent);
     if (reply) this.replies.set(job.id, reply);
+    if (quiet) this.quieted.add(job.id);
+    if (before) this.beforeTurn.set(job.id, before.state);
     this.host.untrackJob(job.id);
     this.paneNames.set(job.id, name);
     tab.root = this.placeNew(tab, job.id, undefined);
@@ -461,7 +518,7 @@ export class Workspace {
     if (waiting) return this.goToAgent(waiting);
     const failedJob = this.jobs.find((job) => job.state === "failed" && !job.seen);
     if (failedJob) return this.openJob(failedJob.id);
-    const replied = rotated.find((entry) => this.replies.get(entry.id)?.unread);
+    const replied = rotated.find((entry) => this.hasUnread(entry.id));
     if (replied) return this.peekAt(replied.id);
     const done = rotated.find((entry) => finished(entry.id));
     if (!done) {
@@ -496,41 +553,47 @@ export class Workspace {
   }
 
   private peekReply(): void {
-    const replies = [...this.replies].filter(([id]) => this.tabOf(id));
-    const newest = (candidates: typeof replies) => candidates.sort(([, a], [, b]) => b.at - a.at)[0];
+    const agents = [...this.replies].filter(([id, kept]) => this.tabOf(id) && kept.length > 0).map(([id]) => id);
+    const at = (id: PaneId) => this.latestReply(id)?.at ?? Number.NEGATIVE_INFINITY;
+    const newest = (candidates: PaneId[]) => candidates.sort((a, b) => at(b) - at(a))[0];
     const target =
-      replies.find(([id]) => id === this.focused) ??
-      newest(replies.filter(([, reply]) => reply.unread)) ??
-      newest(replies.filter(([id]) => this.tabOf(id) === this.tab));
-    if (!target) {
+      agents.find((id) => id === this.focused) ?? newest(agents.filter((id) => this.hasUnread(id))) ?? newest(agents.filter((id) => this.tabOf(id) === this.tab));
+    if (target === undefined) {
       this.message = "No agent reply to show";
       return;
     }
-    this.peekAt(target[0]);
+    this.peekAt(target);
   }
 
   private peekAt(id: PaneId): void {
-    const reply = this.replies.get(id);
+    const kept = this.replies.get(id) ?? [];
     const tab = this.tabOf(id);
-    if (!reply || !tab) return;
+    if (kept.length === 0 || !tab) return;
     this.active = this.tabs.indexOf(tab);
     for (const popup of this.popups.filter((candidate) => candidate.tabId === tab.id && candidate.kind === "job")) this.popupExited(popup.id);
     this.peeking = true;
-    this.host.peekReply(id, `${this.paneNames.get(id) ?? "Claude"} · ${tab.name}`, reply.text);
-    reply.unread = false;
+    const title = `${this.paneNames.get(id) ?? "Claude"} · ${tab.name}`;
+    const unread = kept.filter((reply) => reply.unread);
+    const only = unread.length === 1 ? unread[0] : unread.length === 0 && kept.length === 1 ? kept[0] : undefined;
+    if (only) this.host.peekReply(id, title, only.text);
+    else this.host.pickReply(id, title, replyChoices(kept, this.now()));
+    this.seeReply(id);
     this.acknowledge(id);
   }
 
   private dismissToast(): void {
     const toast = this.toasts()[0];
     if (toast?.kind === "job") toast.job.seen = true;
-    if (toast?.kind === "reply") toast.reply.unread = false;
+    if (toast?.kind === "reply" && toast.brief) toast.reply.toastUntil = undefined;
+    else if (toast?.kind === "reply") for (const reply of this.replies.get(toast.id) ?? []) reply.unread = false;
   }
 
   private acknowledge(id: PaneId): void {
     const state = this.agents.get(id);
     if (state === "waiting") this.agents.set(id, "working");
     if (state === "done" || state === "failed") this.agents.delete(id);
+    const before = this.beforeTurn.get(id);
+    if (before === "done" || before === "failed") this.beforeTurn.set(id, undefined);
     if (this.commandFinished(id)) this.commands.delete(id);
   }
 
@@ -890,6 +953,8 @@ export class Workspace {
     this.paneNames.delete(id);
     this.agents.delete(id);
     this.replies.delete(id);
+    this.beforeTurn.delete(id);
+    this.quieted.delete(id);
     this.commands.delete(id);
     this.activities.delete(id);
     this.modes.delete(id);

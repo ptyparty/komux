@@ -9,6 +9,7 @@ import { UnsafeDirectoryError } from "./private-dir.ts";
 import { formSpec, parseFormSpec, type FormSpec } from "./form/schema.ts";
 import { runHook, waitForAnswers } from "./hooks/hook.ts";
 import { sendControl } from "./mux/control.ts";
+import type { ReplyChoice } from "./mux/peek.ts";
 import { defaultSessionName, listSessions, quitSession, SessionError } from "./mux/session/sessions.ts";
 
 const usage = `qmux: a terminal multiplexer agents can drive
@@ -59,8 +60,9 @@ Usage:
   qmux hook
       Claude Code hook: reads the hook's JSON on stdin and reports the agent's state to qmux.
       Permission requests become a popup in the agent's tab. Does nothing outside qmux.
-  qmux peek spec.json --pane ID
+  qmux peek spec.json --pane ID [--list]
       Show an agent's reply (what Alt p opens); a typed reply is sent to pane ID.
+      With --list, the file lists the agent's replies to pick one from.
   qmux hooks [--install]
       List the Claude Code hooks qmux needs that are missing from your settings, or add them.
   qmux hook --wake
@@ -208,15 +210,42 @@ async function hookCommand(): Promise<void> {
 }
 
 async function peekCommand(args: string[]): Promise<void> {
-  const { values, positionals } = parse(args, { pane: { type: "string" } });
+  const { values, positionals } = parse(args, { pane: { type: "string" }, list: { type: "boolean" } });
   const [source] = positionals;
   if (!source) throw new UsageError("qmux peek needs a spec file");
-  const result = await (await import("./form/show.ts")).showForm(await readSpec(source), async () => {});
+  const { showForm } = await import("./form/show.ts");
+  const { peekSpec, pickSpec } = await import("./mux/peek.ts");
+  const list = values.list ? await readReplyList(source) : undefined;
+  let text = "";
+  if (list) {
+    for (;;) {
+      const picked = await showForm(pickSpec(list.title, list.replies), async () => {});
+      const choice = picked.status === "submitted" ? list.replies[Number(picked.values.pick)] : undefined;
+      if (!choice) return;
+      const result = await showForm(peekSpec(list.title, choice.text), async () => {});
+      if (result.status !== "submitted") continue;
+      text = typeof result.values.reply === "string" ? result.values.reply.trim() : "";
+      break;
+    }
+  } else {
+    const result = await showForm(await readSpec(source), async () => {});
+    text = result.status === "submitted" && typeof result.values.reply === "string" ? result.values.reply.trim() : "";
+  }
   const paneId = Number(values.pane);
   const socket = process.env.QMUX_SOCKET;
-  const text = result.status === "submitted" && typeof result.values.reply === "string" ? result.values.reply.trim() : "";
   if (!text || !socket || !Number.isInteger(paneId)) return;
   await sendControl(socket, { method: "agent.prompt", params: { paneId, text } }).catch(() => undefined);
+}
+
+async function readReplyList(source: string): Promise<{ title: string; replies: ReplyChoice[] }> {
+  const json: unknown = await (source === "-" ? Bun.stdin.json() : Bun.file(source).json()).catch(() => undefined);
+  if (typeof json !== "object" || json === null || !("replies" in json) || !Array.isArray(json.replies)) throw new UsageError(`${source} is not a list of replies`);
+  const replies: unknown[] = json.replies;
+  const valid = (entry: unknown): entry is ReplyChoice =>
+    typeof entry === "object" && entry !== null && "label" in entry && typeof entry.label === "string" && "text" in entry && typeof entry.text === "string";
+  if (replies.length === 0 || !replies.every(valid)) throw new UsageError(`${source} lists replies that each need a label and text`);
+  const title = "title" in json && typeof json.title === "string" ? json.title : "Replies";
+  return { title, replies };
 }
 
 async function hooksCommand(args: string[]): Promise<void> {

@@ -35,6 +35,15 @@ describe("qmux hook", () => {
     expect(stateForEvent({ hook_event_name: "SessionStart" })).toBeUndefined();
   });
 
+  test("a reply's last line can ask for a brief toast or none", () => {
+    const stop = (message: string) => stateForEvent({ hook_event_name: "Stop", last_assistant_message: message });
+    expect(stop("Done.\n\n**QMUX: NO TOAST**\n")).toEqual({ state: "done", reply: "Done.\n\n**QMUX: NO TOAST**\n", toast: "none" });
+    expect(stop("Build passed.\nqmux: brief toast")).toMatchObject({ toast: "brief" });
+    expect(stop("Shall I start?")).toEqual({ state: "done", reply: "Shall I start?" });
+    expect(stop("QMUX: NO TOAST\nbut then more")).not.toHaveProperty("toast");
+    expect(stop(`${"x".repeat(9000)}\nQMUX: BRIEF TOAST`)).toMatchObject({ toast: "brief", reply: "x".repeat(8000) });
+  });
+
   test("session starts, prompts and ends report which session the pane holds", () => {
     expect(sessionForEvent({ hook_event_name: "SessionStart", session_id: "s1" })).toBe("s1");
     expect(sessionForEvent({ hook_event_name: "UserPromptSubmit", session_id: "s1" })).toBe("s1");

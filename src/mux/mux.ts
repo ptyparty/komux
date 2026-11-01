@@ -204,6 +204,16 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     }));
   };
 
+  const openPeek = (near: PaneId, title: string, spec: unknown, list = false) => {
+    const tabId = workspace.tabOf(near)?.id;
+    if (tabId === undefined) return;
+    const file = join(tabDirs.tabDir(tabId), `peek-${near}.json`);
+    void Bun.write(file, JSON.stringify(spec)).then(() => {
+      openViewPopup(near, [...selfCommand(), "peek", file, "--pane", String(near), ...(list ? ["--list"] : [])], title, { width: 80, height: 80 }, true);
+      refresh();
+    });
+  };
+
   const host: PaneHost = {
     create: (id, cwd, command, tabId) => spawnPane(id, cwd, command, (exited) => workspace.paneExited(exited), { holdOnExit: true, tabId }),
     createJob: (id, cwd, command, tabId, env) => {
@@ -217,15 +227,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     },
     runningCommand: (id) => runningCommands.get(id)?.commandLine,
     shellCommand: (text) => [process.env.SHELL ?? "/bin/sh", "-c", text],
-    peekReply: (near, title, text) => {
-      const tabId = workspace.tabOf(near)?.id;
-      if (tabId === undefined) return;
-      const spec = join(tabDirs.tabDir(tabId), `peek-${near}.json`);
-      void Bun.write(spec, JSON.stringify(peekSpec(title, text))).then(() => {
-        openViewPopup(near, [...selfCommand(), "peek", spec, "--pane", String(near)], title, { width: 80, height: 80 }, true);
-        refresh();
-      });
-    },
+    peekReply: (near, title, text) => openPeek(near, title, peekSpec(title, text)),
+    pickReply: (near, title, choices) => openPeek(near, title, { title, replies: choices }, true),
     composeClaude: (near, candidates, context) => {
       const awake = (id: PaneId) => nativeClaudes.has(id) && !workspace.dormant.has(id);
       const target = awake(near) ? near : (candidates.find(awake) ?? (nativeClaudes.has(near) ? near : candidates.find((id) => nativeClaudes.has(id))));
@@ -423,9 +426,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           return { ok: true };
         }
         case "agent.state": {
-          const { paneId, state, detail, sessionId, reply } = request.params;
+          const { paneId, state, detail, sessionId, reply, toast } = request.params;
           if (sessionId) trackSession(paneId, sessionId, state === "clear");
-          const notify = workspace.setAgentState(paneId, state === "clear" ? undefined : state, reply);
+          const notify = workspace.setAgentState(paneId, state === "clear" ? undefined : state, reply, toast);
           if (notify) {
             const where = workspace.tabOf(paneId)?.name ?? "qmux";
             renderer.triggerNotification(detail ?? (state === "waiting" ? "An agent needs you" : "An agent finished"), where);
