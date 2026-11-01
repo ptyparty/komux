@@ -191,7 +191,7 @@ The installer writes `qmux hook` when `qmux` and `bun` are on your PATH. Otherwi
 
 With the hooks in place:
 
-- **Badges:** pane titles and tabs show `🧠` working, `!` needs you, and `🚀` done.
+- **Badges:** pane titles and tabs show `🧠` working, `!` needs you, and `🚀` done. In the dock and the mode row, an agent with nothing to report shows `💤`.
 - **Long commands:** in a fish pane, a command that runs a second or more shows `⏳` while it runs, then `🎉` or `💥` when it finishes. These sit beside an agent's badge, so a tab can show both. List programs that should never get these badges, such as editors and agents, in the config's `untrackedCommands`.
 - **Alt+a** jumps to the next agent that needs you, then to finished ones. Typing in a finished pane clears its `🚀`.
 - **Notifications:** an agent that needs you or finishes in a pane you are not looking at sends a terminal notification.

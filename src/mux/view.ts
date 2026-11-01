@@ -245,7 +245,7 @@ export class MuxView {
         const activity = this.workspace.dormant.has(job.id) ? "not started · Alt c" : state === "working" ? this.workspace.activities.get(job.id) : undefined;
         const text = activity ? fit(activity, textRoom) : reply ? firstLine(reply.text, textRoom) : fit(state ? agentLabels[state] : "ready", textRoom);
         const color = state ? agentColors[state] : theme.muted;
-        return [bold(fg(color)(` ${state ? agentBadges[state] : "🧠"} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text)];
+        return [bold(fg(color)(` ${state ? agentBadges[state] : idleBadge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text)];
       }
       const line = this.actions.jobLine(job.id) || (job.state === "running" ? "no output yet" : jobDetail(job, Date.now()));
       const shown = fit(line, room);
@@ -425,7 +425,7 @@ export class MuxView {
     if (jobs.length === 0 || room < 4) return styled([]);
     const chips = jobs.map((job) => {
       const state = job.agent ? this.workspace.agents.get(job.id) : undefined;
-      const badge = job.agent ? (state ? agentBadges[state] : "🧠") : jobBadge(job);
+      const badge = job.agent ? (state ? agentBadges[state] : idleBadge) : jobBadge(job);
       const color = state ? agentColors[state] : job.state === "running" ? theme.text : commandColors[job.state];
       return { id: job.id, badge, name: job.name, color };
     });
@@ -494,6 +494,7 @@ const slideMs = 90;
 const slideFrameMs = 15;
 const defaultPopupSize = { width: 80, height: 80 };
 const agentBadges: Record<AgentState, string> = { working: "🧠", waiting: "!", done: "🚀", failed: "✗" };
+const idleBadge = "💤";
 const agentLabels: Record<AgentState, string> = { working: "working", waiting: "needs you", done: "done", failed: "failed" };
 const agentColors: Record<AgentState, string> = { working: theme.accent, waiting: theme.warning, done: theme.modes.normal, failed: theme.modes.locked };
 const commandBadges: Record<CommandState, string> = { running: "⏳", succeeded: "🎉", failed: "💥" };
