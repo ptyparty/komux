@@ -426,9 +426,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           return { ok: true };
         }
         case "agent.state": {
-          const { paneId, state, detail, sessionId, reply, toast } = request.params;
+          const { paneId, state, detail, sessionId, reply, toast, wakeup } = request.params;
           if (sessionId) trackSession(paneId, sessionId, state === "clear");
-          const notify = workspace.setAgentState(paneId, state === "clear" ? undefined : state, reply, toast);
+          const notify = workspace.setAgentState(paneId, state === "clear" ? undefined : state, reply, toast, wakeup);
           if (notify) {
             const where = workspace.tabOf(paneId)?.name ?? "qmux";
             renderer.triggerNotification(detail ?? (state === "waiting" ? "An agent needs you" : "An agent finished"), where);
@@ -505,7 +505,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           const pane = panes.get(paneId);
           if (!pane) return { ok: false, error: `no pane ${paneId}` };
           const socket = nativeClaudes.get(paneId);
-          const route = promptRoute(socket !== undefined, workspace.agents.get(paneId));
+          const route = promptRoute(socket !== undefined, workspace.wakeups.has(paneId) ? "working" : workspace.agents.get(paneId));
           if (route === "busy") {
             workspace.message = `${workspace.paneNames.get(paneId) ?? workspace.jobStatus(paneId)?.name ?? "Claude"} is busy · open it to answer`;
             refresh();

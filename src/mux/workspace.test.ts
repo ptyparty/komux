@@ -1425,6 +1425,42 @@ describe("Workspace", () => {
       expect(workspace.setAgentState(agent, "done")).toBe(true);
     });
 
+    test("a wakeup turn keeps the tab as it was and still toasts a reply that needs you", () => {
+      const { workspace } = ide({ now: 5 });
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      expect(workspace.setAgentState(agent, "working", undefined, undefined, true)).toBe(false);
+      expect(workspace.agents.get(agent)).toBe("done");
+      expect(workspace.wakeups.has(agent)).toBe(true);
+      workspace.setAgentState(agent, "done", "That was my own edit.", "none");
+      expect(workspace.wakeups.has(agent)).toBe(false);
+      expect(workspace.latestReply(agent)?.text).toBe("Shall I start?");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.setAgentState(agent, "done", "The build failed.")).toBe(true);
+      expect(workspace.toasts()).toMatchObject([{ kind: "reply", reply: { text: "The build failed." } }]);
+      workspace.seeReply(agent);
+      workspace.agents.delete(agent);
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.setAgentState(agent, "done")).toBe(false);
+      expect(workspace.agents.has(agent)).toBe(false);
+    });
+
+    test("a wakeup that needs you, or arrives mid-turn, changes state as usual", () => {
+      const { workspace } = ide({ now: 5 });
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.agents.has(agent)).toBe(false);
+      workspace.setAgentState(agent, "waiting");
+      expect(workspace.agents.get(agent)).toBe("waiting");
+      expect(workspace.wakeups.has(agent)).toBe(false);
+      workspace.setAgentState(agent, "working");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.agents.get(agent)).toBe("working");
+      expect(workspace.wakeups.has(agent)).toBe(false);
+    });
+
     test("a quiet reply keeps a badge it can't place in a turn, and drops one you saw mid-turn", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;

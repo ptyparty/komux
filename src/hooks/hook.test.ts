@@ -35,6 +35,12 @@ describe("qmux hook", () => {
     expect(stateForEvent({ hook_event_name: "SessionStart" })).toBeUndefined();
   });
 
+  test("a prompt that is a task notification starts a wakeup turn", () => {
+    const prompt = (text: string) => stateForEvent({ hook_event_name: "UserPromptSubmit", prompt: text });
+    expect(prompt("<task-notification>\n<task-id>b1</task-id>\n</task-notification>")).toEqual({ state: "working", wakeup: true });
+    expect(prompt("why does <task-notification> show up?")).toEqual({ state: "working" });
+  });
+
   test("a reply's last line can ask for a brief toast or none", () => {
     const stop = (message: string) => stateForEvent({ hook_event_name: "Stop", last_assistant_message: message });
     expect(stop("Done.\n\n**QMUX: NO TOAST**\n")).toEqual({ state: "done", reply: "Done.\n\n**QMUX: NO TOAST**\n", toast: "none" });

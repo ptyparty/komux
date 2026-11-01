@@ -241,11 +241,13 @@ export class MuxView {
         const reply = this.workspace.latestReply(job.id);
         const mode = this.workspace.modes.get(job.id);
         const modeLabel = mode ? `${mode} · ` : "";
-        const textRoom = Math.max(room - Bun.stringWidth(modeLabel), 1);
-        const activity = this.workspace.dormant.has(job.id) ? "not started · Alt c" : state === "working" ? this.workspace.activities.get(job.id) : undefined;
+        const wakingUp = this.workspace.wakeups.has(job.id);
+        const wakeup = wakingUp && room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeupLabel) >= 10 ? wakeupLabel : "";
+        const textRoom = Math.max(room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeup), 1);
+        const activity = this.workspace.dormant.has(job.id) ? "not started · Alt c" : state === "working" || wakingUp ? this.workspace.activities.get(job.id) : undefined;
         const text = activity ? fit(activity, textRoom) : reply ? firstLine(reply.text, textRoom) : fit(state ? agentLabels[state] : "ready", textRoom);
         const color = state ? agentColors[state] : theme.muted;
-        return [bold(fg(color)(` ${state ? agentBadges[state] : idleBadge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text)];
+        return [bold(fg(color)(` ${state ? agentBadges[state] : idleBadge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text), fg(theme.muted)(wakeup)];
       }
       const line = this.actions.jobLine(job.id) || (job.state === "running" ? "no output yet" : jobDetail(job, Date.now()));
       const shown = fit(line, room);
@@ -495,6 +497,7 @@ const slideFrameMs = 15;
 const defaultPopupSize = { width: 80, height: 80 };
 const agentBadges: Record<AgentState, string> = { working: "🧠", waiting: "!", done: "🚀", failed: "✗" };
 const idleBadge = "💤";
+const wakeupLabel = " · handling a job event";
 const agentLabels: Record<AgentState, string> = { working: "working", waiting: "needs you", done: "done", failed: "failed" };
 const agentColors: Record<AgentState, string> = { working: theme.accent, waiting: theme.warning, done: theme.modes.normal, failed: theme.modes.locked };
 const commandBadges: Record<CommandState, string> = { running: "⏳", succeeded: "🎉", failed: "💥" };
