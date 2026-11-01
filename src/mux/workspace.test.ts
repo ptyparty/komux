@@ -1719,3 +1719,44 @@ describe("Workspace", () => {
     expect(workspace.mode).toBe("jobs");
   });
 });
+
+describe("scripts", () => {
+  function ide(clock: { now: number }) {
+    const config = configSchema.parse({ projects: { layout: "ide" }, layouts: { ide: { row: [{ focus: true }, {}] } } });
+    const workspace = new Workspace(new FakeHost(), "/home", config, () => clock.now);
+    workspace.openProject("merlot");
+    return { workspace };
+  }
+
+  test("a script's dock text, tray text and toast belong to its job", () => {
+    const clock = { now: 0 };
+    const { workspace } = ide(clock);
+    const id = workspace.runJob(2, ["qmux", "script", "host", "x"], "deploy")!;
+    expect(workspace.setJobDock(id, "3 of 5 done")).toBe(true);
+    expect(workspace.tabJobs()[0]).toMatchObject({ dock: true });
+    expect(workspace.jobTexts.get(id)).toBe("3 of 5 done");
+    workspace.setTrayText(id, "⏳ 3/5");
+    workspace.addNote(id, "halfway");
+    expect(workspace.toasts()).toMatchObject([{ kind: "note", id, note: { text: "halfway" } }]);
+    expect(workspace.nextToastExpiry()).toBe(5000);
+    clock.now = 6000;
+    expect(workspace.toasts()).toEqual([]);
+    workspace.setJobDock(id, null);
+    expect(workspace.tabJobs()[0]).toMatchObject({ dock: false });
+    expect(workspace.jobTexts.has(id)).toBe(false);
+    workspace.closeJob(id);
+    expect(workspace.trayTexts.has(id)).toBe(false);
+    expect(workspace.setJobDock(id, "gone")).toBe(false);
+  });
+
+  test("a script sees names and states in its own tab", () => {
+    const { workspace } = ide({ now: 0 });
+    const id = workspace.runJob(2, ["qmux", "script", "host", "x"], "deploy")!;
+    workspace.setAgentState(2, "working");
+    const state = workspace.scriptState(id)!;
+    expect(state.tabs.filter((tab) => tab.current)).toEqual([{ name: workspace.tab.name, current: true, attention: "working" }]);
+    expect(state.jobs).toEqual([{ name: "deploy", state: "running", agent: undefined }]);
+    expect(state.panes.some((pane) => pane.agent === "working")).toBe(true);
+    expect(workspace.scriptState(999)).toBeUndefined();
+  });
+});

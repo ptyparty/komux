@@ -6,6 +6,8 @@ import { ask } from "../ask/ask.ts";
 import { hostNames } from "../ask/hosts.ts";
 import { AskStore } from "../ask/store.ts";
 import { formSpec } from "../form/schema.ts";
+import { startScript, stopScript } from "../script/run.ts";
+import { ScriptStore } from "../script/store.ts";
 
 const defaultWaitSeconds = 50;
 
@@ -14,6 +16,21 @@ const askDescription = `Ask the user questions in a form that pops up in their t
 Use it when you need a decision, a choice between options, or several answers at once. It is quicker for the user than typing replies in chat. Element types: text, confirm (yes/no), choice (single or multi, with an automatic "Other" free-text option), number (bounded), note (display-only text), markdown (display-only, rendered markdown for longer content), image (display-only, a picture such as a screenshot shown from a file path), and slides (several images the user pages through one at a time, leaving an optional note on each; the answer is one note per slide). Use \`when\` to show an element only when an earlier answer calls for it.
 
 The result is {"status":"submitted","values":{...}} with one entry per visible element, {"status":"cancelled"} if the user dismissed the form, or {"status":"pending"} if they have not answered within wait_seconds. When it is pending, call the wait tool with the returned id.`;
+
+const scriptDescription = `Run a TypeScript program in a sandbox inside the user's qmux, as a job in your tab. Use it for UI a single form can't do: a live checklist or progress panel you update as you work, a multi-step wizard, a table the user picks rows from.
+
+The sandbox can only draw qmux things. It has no fetch, files, processes, modules or Node/Bun APIs; it sees the JSON \`input\` you pass and a \`qmux\` object:
+- qmux.render(elements): the panel's content. Elements: {type:"text", text, style?}, {type:"markdown", text}, {type:"progress", value, max, label?}, {type:"list", id, items:[{value, text, mark?, detail?}]}, {type:"table", id?, columns, rows}, {type:"buttons", id, options}, {type:"divider"}.
+- qmux.show() / qmux.hide(): pop the panel up over the tab, or tuck it away (Alt j toggles it too).
+- qmux.dock(text|null), qmux.tray(text|null), qmux.toast(text): a dock row, a chip by the tray, a brief toast.
+- await qmux.ask(form): a qmux form (no image or slides elements); resolves to {status, values}.
+- await qmux.state(): tab, pane and job names and agent and job states. No screen text.
+- qmux.onEvent(fn): {type:"select", id, value} when the user presses Enter on a list item, table row or button; {type:"key", key} for other keys.
+- qmux.onMessage(fn): messages you send with script_send.
+- qmux.reply(json): a reply you read with script_wait. qmux.exit(json?): end the script.
+- setTimeout, setInterval, clearTimeout, clearInterval, console.log (kept in a log).
+
+Top-level await works; import does not. A script that throws, hogs the CPU or uses over 64 MB is stopped. It lives until it exits, is stopped, or its tab closes. \`qmux script types\` prints full TypeScript declarations.`;
 
 export function createServer(store: AskStore = new AskStore()): McpServer {
   const server = new McpServer({ name: "qmux", version: "0.1.0" });
@@ -48,6 +65,68 @@ export function createServer(store: AskStore = new AskStore()): McpServer {
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     async ({ id, timeout_seconds }) => reply({ id, ...(await store.wait(id, timeout_seconds * 1000)) }),
+  );
+
+  server.registerTool(
+    "script_run",
+    {
+      title: "Run a qmux script",
+      description: scriptDescription,
+      inputSchema: {
+        source: z.string().describe("The TypeScript program"),
+        input: z.unknown().optional().describe("JSON the script reads as the global `input`"),
+        name: z.string().optional().describe("Shown on the job chip, dock row, panel title and toasts; keep it to about 16 characters"),
+        show: z.boolean().default(false).describe("Pop the panel up over the tab straight away"),
+        dock: z.boolean().default(false).describe("Give the script a dock row from the start"),
+        wait_seconds: z.number().min(0).max(600).default(0).describe("How long to wait for the script's first replies or its end"),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ source, input, name, show, dock, wait_seconds }) => {
+      const scripts = new ScriptStore();
+      const meta = await startScript(scripts, source, input ?? null, { name, show, dock });
+      return reply({ ...(await scripts.wait(meta.id, wait_seconds * 1000)) });
+    },
+  );
+
+  server.registerTool(
+    "script_send",
+    {
+      title: "Send a running script a message",
+      description: "Deliver a JSON message to a running script's qmux.onMessage handler.",
+      inputSchema: { id: z.string(), message: z.unknown() },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ id, message }) => {
+      new ScriptStore().send(id, message ?? null);
+      return reply({ id, sent: true });
+    },
+  );
+
+  server.registerTool(
+    "script_wait",
+    {
+      title: "Read a script's replies",
+      description: "Return the script's status and any replies not read yet, waiting up to timeout_seconds for one when there are none. Status is starting, running, exited (with value), error (with error), stopped, or lost.",
+      inputSchema: { id: z.string(), timeout_seconds: z.number().min(0).max(600).default(defaultWaitSeconds) },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ id, timeout_seconds }) => reply({ ...(await new ScriptStore().wait(id, timeout_seconds * 1000)) }),
+  );
+
+  server.registerTool(
+    "script_stop",
+    {
+      title: "Stop a script",
+      description: "End a running script and close its panel.",
+      inputSchema: { id: z.string() },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ id }) => {
+      const scripts = new ScriptStore();
+      await stopScript(scripts, id);
+      return reply({ ...scripts.take(id) });
+    },
   );
 
   return server;

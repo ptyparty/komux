@@ -14,7 +14,14 @@ export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "v
 export type JobState = "running" | "succeeded" | "failed";
 export type Job = { id: PaneId; tabId: number; name: string; command?: string[]; state: JobState; code?: number | null; started: number; finished?: number; seen: boolean; agent?: boolean; dock: boolean; layout?: boolean };
 export type Reply = { text: string; at: number; unread: boolean; toastUntil?: number };
-export type Toast = { kind: "job"; job: Job; tab: Tab } | { kind: "reply"; id: PaneId; reply: Reply; tab: Tab; brief: boolean };
+export type Note = { id: PaneId; text: string; until: number };
+export type Toast = { kind: "job"; job: Job; tab: Tab } | { kind: "reply"; id: PaneId; reply: Reply; tab: Tab; brief: boolean } | { kind: "note"; id: PaneId; note: Note; tab: Tab };
+export type ScriptState = {
+  shown: boolean;
+  tabs: { name: string; current: boolean; attention?: AgentState }[];
+  panes: { name?: string; agent?: AgentState }[];
+  jobs: { name: string; state: JobState; agent?: AgentState }[];
+};
 
 export const agentStates = ["working", "waiting", "done", "failed"] as const;
 export type AgentState = (typeof agentStates)[number];
@@ -91,6 +98,9 @@ export class Workspace {
   readonly activities = new Map<PaneId, string>();
   readonly modes = new Map<PaneId, string>();
   readonly dormant = new Set<PaneId>();
+  readonly jobTexts = new Map<PaneId, string>();
+  readonly trayTexts = new Map<PaneId, string>();
+  private notes: Note[] = [];
   private readonly hideOnReply = new Set<PaneId>();
   private readonly lastJobs = new Map<number, PaneId>();
   private peeking = false;
@@ -322,7 +332,42 @@ export class Workspace {
       const reply = kept.findLast((candidate) => candidate.unread);
       return reply ? [{ kind: "reply", id, reply, tab, brief: false }] : [];
     });
-    return [...jobs, ...brief, ...unread];
+    const notes = this.notes.flatMap((note): Toast[] => {
+      const tab = this.ownerTab(note.id);
+      return tab && note.until > now ? [{ kind: "note", id: note.id, note, tab }] : [];
+    });
+    return [...jobs, ...brief, ...notes, ...unread];
+  }
+
+  addNote(id: PaneId, text: string): void {
+    const now = this.now();
+    this.notes = [...this.notes.filter((note) => note.until > now && note.id !== id), { id, text, until: now + toastMs }];
+  }
+
+  setJobDock(id: PaneId, text: string | null): boolean {
+    const job = this.jobStatus(id);
+    if (!job) return false;
+    job.dock = text !== null;
+    if (text === null) this.jobTexts.delete(id);
+    else this.jobTexts.set(id, text);
+    return true;
+  }
+
+  setTrayText(id: PaneId, text: string | null): void {
+    if (text === null) this.trayTexts.delete(id);
+    else this.trayTexts.set(id, text);
+  }
+
+  scriptState(id: PaneId): ScriptState | undefined {
+    const own = this.ownerTab(id);
+    if (!own) return undefined;
+    const jobs = new Set(this.jobs.map((job) => job.id));
+    return {
+      shown: this.popups.some((popup) => popup.id === id),
+      tabs: this.tabs.map((tab) => ({ name: tab.name, current: tab.id === own.id, attention: this.tabAttention(tab) })),
+      panes: this.tabPanes(own).filter((pane) => !jobs.has(pane)).map((pane) => ({ name: this.paneNames.get(pane), agent: this.agents.get(pane) })),
+      jobs: this.tabJobs(own).map((job) => ({ name: job.name, state: job.state, agent: job.agent ? this.agents.get(job.id) : undefined })),
+    };
   }
 
   tabUnread(tab: Tab): boolean {
@@ -342,7 +387,9 @@ export class Workspace {
         ? [toast.job.finished! + toastMs - this.now()]
         : toast.kind === "reply" && toast.brief
           ? [toast.reply.toastUntil! - this.now()]
-          : [],
+          : toast.kind === "note"
+            ? [toast.note.until - this.now()]
+            : [],
     );
     return left.length > 0 ? Math.max(Math.min(...left), 0) : undefined;
   }
@@ -608,6 +655,7 @@ export class Workspace {
   private dismissToast(): void {
     const toast = this.toasts()[0];
     if (toast?.kind === "job") toast.job.seen = true;
+    if (toast?.kind === "note") this.notes = this.notes.filter((note) => note !== toast.note);
     if (toast?.kind === "reply" && toast.brief) toast.reply.toastUntil = undefined;
     else if (toast?.kind === "reply") for (const reply of this.replies.get(toast.id) ?? []) reply.unread = false;
   }
@@ -984,6 +1032,9 @@ export class Workspace {
     this.activities.delete(id);
     this.modes.delete(id);
     this.dormant.delete(id);
+    this.jobTexts.delete(id);
+    this.trayTexts.delete(id);
+    this.notes = this.notes.filter((note) => note.id !== id);
   }
 
   private newPane(axis: Axis | undefined): void {

@@ -17,9 +17,9 @@ claude mcp add qmux -- qmux mcp # gives Claude Code the ask and wait tools
 qmux setup --yes                # adds qmux's hooks, skill and rules to Claude Code's config
 ```
 
-`qmux setup` lists what qmux adds to Claude Code's config and whether each part is there: the hooks below, the `qmux-ask` skill so agents know when and how to ask, and two rules. `qmux-jobs` has Claude run long commands as qmux jobs with short names, and `qmux-replies` lets it quiet replies that need nothing from you. `--yes` sets up whatever is missing, `--pick` lets you choose in a form, and `--remove` takes it all out again. The skill and rules are links into this checkout, so they follow it as you update it. Anything else already there under the same name is moved to `~/.claude/qmux-backup/` and put back by `--remove`; `qmux claude`'s offer only adds what is missing, and leaves moving things aside to `qmux setup`. `qmux claude` offers the same when it starts inside qmux.
+`qmux setup` lists what qmux adds to Claude Code's config and whether each part is there: the hooks below, the `qmux-ask` and `qmux-script` skills so agents know when and how to ask and run scripts, and two rules. `qmux-jobs` has Claude run long commands as qmux jobs with short names, and `qmux-replies` lets it quiet replies that need nothing from you. `--yes` sets up whatever is missing, `--pick` lets you choose in a form, and `--remove` takes it all out again. The skill and rules are links into this checkout, so they follow it as you update it. Anything else already there under the same name is moved to `~/.claude/qmux-backup/` and put back by `--remove`; `qmux claude`'s offer only adds what is missing, and leaves moving things aside to `qmux setup`. `qmux claude` offers the same when it starts inside qmux.
 
-The `ask` and `wait` tools are marked read-only, so Claude Code can use them in plan mode without asking permission.
+The `ask`, `wait` and `script_*` tools are marked read-only, so Claude Code can use them in plan mode without asking permission. Scripts can only change what qmux shows, so they count as read-only too.
 
 ### macOS support
 
@@ -130,6 +130,24 @@ Run builds and test suites with `qmux job run --wait -- <command>` so the user c
 ```
 
 Closing a tab closes its jobs. A job's output is also written to `$QMUX_TAB_DIR/jobs/<id>.log`.
+
+## Scripts
+
+Agents can run small TypeScript programs that draw in qmux: a panel with text, markdown, progress bars, lists, tables and buttons, a dock row, a chip beside the tray, and toasts. A script can also ask a `qmux ask` form, read tab, pane and job names and states, and swap JSON messages with the agent that started it. That covers UI a single form can't, such as a checklist the agent ticks off as it works or a table you pick rows from.
+
+```
+qmux script run steps.ts --name migrate --show --input '{"steps":["schema","backfill"]}'
+qmux script send ID '{"done":1}'      # reaches qmux.onMessage
+qmux script wait ID --timeout 50      # replies from qmux.reply, then the exit value
+qmux script stop ID
+qmux script types                     # what a script can call
+```
+
+The MCP server offers the same as `script_run`, `script_send`, `script_wait` and `script_stop`, and the `qmux-script` skill teaches agents to use them.
+
+A script runs as a job in the tab it was started from, so Ctrl+s, Alt j and the job chips work on it. Its panel is the job's popup; ↑/↓ move between list items, table rows and buttons, and Enter selects one. It runs until it exits, is stopped, or its tab closes.
+
+Scripts run in QuickJS compiled to WebAssembly, on a thread of their own. The sandbox has no `fetch`, file, process, module or Node/Bun APIs, only the `qmux` calls above, and every value crosses into qmux as plain JSON. Those calls reach only what qmux shows: none of them can start a command, type into a pane, or prompt another agent, and forms from scripts can't show images, since those read files. A script is stopped when one step runs over 100 ms, when it stops responding for 2 s, when it uses 64 MB, or when it throws.
 
 ## Native Claude (experimental)
 
