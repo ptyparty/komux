@@ -45,12 +45,15 @@ class FakeHost implements PaneHost {
   claudes = new Set<number>();
   composed: number[] = [];
   peeked: [number, string, string][] = [];
-  peekReply(near: number, title: string, text: string): void {
+  peekKeys: string[] = [];
+  peekReply(near: number, title: string, text: string, key: string): void {
     this.peeked.push([near, title, text]);
+    this.peekKeys.push(key);
   }
   picked: [number, string, ReplyChoice[]][] = [];
-  pickReply(near: number, title: string, choices: ReplyChoice[]): void {
+  pickReply(near: number, title: string, choices: ReplyChoice[], key: string): void {
     this.picked.push([near, title, choices]);
+    this.peekKeys.push(key);
   }
   composeClaude(near: number, candidates: number[]): string | undefined {
     const target = this.claudes.has(near) ? near : candidates.find((id) => this.claudes.has(id));
@@ -725,6 +728,51 @@ describe("Workspace", () => {
     expect(workspace.popup?.id).toBe(compose);
     expect(workspace.popups.filter((popup) => popup.key === "compose:1")).toHaveLength(1);
     expect(workspace.raiseViewPopup("compose:2")).toBe(false);
+  });
+
+  test("Alt p and Alt a bring the open reply forward, and replace it once a newer reply arrives", () => {
+    const clock = { now: 0 };
+    const host = new FakeHost();
+    const workspace = new Workspace(host, undefined, undefined, () => clock.now);
+    const agent = workspace.focused;
+    press(workspace, "ctrl+t", "c");
+    const elsewhere = workspace.active;
+    workspace.setAgentState(agent, "done", "Built it");
+    press(workspace, "alt+p");
+    workspace.openViewPopup(60, "peek", agent, undefined, host.peekKeys[0]);
+    workspace.openViewPopup(61, "Notebook", agent);
+    expect(press(workspace, "alt+p")).toEqual([true]);
+    expect(host.peeked).toHaveLength(1);
+    expect(workspace.popup?.id).toBe(60);
+    clock.now = 5;
+    workspace.active = elsewhere;
+    workspace.setAgentState(agent, "done", "Built it again");
+    expect(press(workspace, "alt+a")).toEqual([true]);
+    expect(host.destroyed).toEqual([60]);
+    expect(host.peeked.map(([, , text]) => text)).toEqual(["Built it", "Built it again"]);
+    expect(workspace.latestReply(agent)?.unread).toBe(false);
+    workspace.openViewPopup(62, "peek", agent, undefined, host.peekKeys[1]);
+    host.held.add(62);
+    workspace.openViewPopup(63, "Notebook", agent);
+    press(workspace, "alt+p");
+    expect(host.destroyed).toEqual([60, 62]);
+    expect(host.picked).toHaveLength(1);
+  });
+
+  test("peeking at an agent leaves another tab's open reply alone", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    const first = workspace.focused;
+    press(workspace, "ctrl+t", "c");
+    const second = workspace.focused;
+    workspace.setAgentState(first, "done", "first reply");
+    workspace.active = 0;
+    workspace.setAgentState(second, "done", "second reply");
+    press(workspace, "alt+p");
+    workspace.openViewPopup(60, "peek", first, undefined, host.peekKeys[0]);
+    press(workspace, "alt+a");
+    expect(host.peeked.map(([id]) => id)).toEqual([first, second]);
+    expect(host.destroyed).toEqual([]);
   });
 
   test("a popup belongs to the tab it opened over", () => {

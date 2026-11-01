@@ -51,8 +51,8 @@ export interface PaneHost {
   runningCommand(id: PaneId): string | undefined;
   shellCommand(text: string): string[];
   composeClaude(near: PaneId, candidates: PaneId[], context?: ComposeContext): string | undefined;
-  peekReply(near: PaneId, title: string, text: string): void;
-  pickReply(near: PaneId, title: string, choices: ReplyChoice[]): void;
+  peekReply(near: PaneId, title: string, text: string, key: string): void;
+  pickReply(near: PaneId, title: string, choices: ReplyChoice[], key: string): void;
   tabClosed(tabId: number): void;
   projects(): Project[];
   destroy(id: PaneId): void;
@@ -583,13 +583,26 @@ export class Workspace {
     this.active = this.tabs.indexOf(tab);
     for (const popup of this.popups.filter((candidate) => candidate.tabId === tab.id && candidate.kind === "job")) this.popupExited(popup.id);
     this.peeking = true;
-    const title = `${this.paneNames.get(id) ?? "Claude"} · ${tab.name}`;
-    const unread = kept.filter((reply) => reply.unread);
-    const only = unread.length === 1 ? unread[0] : unread.length === 0 && kept.length === 1 ? kept[0] : undefined;
-    if (only) this.host.peekReply(id, title, only.text);
-    else this.host.pickReply(id, title, replyChoices(kept, this.now()));
+    const key = `peek:${id}:${kept.at(-1)!.at}`;
+    if (!this.raisePeek(tab, key)) {
+      const title = `${this.paneNames.get(id) ?? "Claude"} · ${tab.name}`;
+      const unread = kept.filter((reply) => reply.unread);
+      const only = unread.length === 1 ? unread[0] : unread.length === 0 && kept.length === 1 ? kept[0] : undefined;
+      if (only) this.host.peekReply(id, title, only.text, key);
+      else this.host.pickReply(id, title, replyChoices(kept, this.now()), key);
+    }
     this.seeReply(id);
     this.acknowledge(id);
+  }
+
+  private raisePeek(tab: Tab, key: string): boolean {
+    const peeks = this.popups.filter((popup) => popup.tabId === tab.id && popup.kind === "view" && popup.key?.startsWith("peek:"));
+    const stale = peeks.filter((popup) => popup.key !== key || this.host.isHeld(popup.id));
+    for (const popup of stale) {
+      this.host.destroy(popup.id);
+      this.popupExited(popup.id);
+    }
+    return this.raiseViewPopup(key);
   }
 
   private dismissToast(): void {
