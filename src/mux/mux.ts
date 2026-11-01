@@ -204,12 +204,12 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     }));
   };
 
-  const openPeek = (near: PaneId, title: string, spec: unknown, list = false) => {
+  const openPeek = (near: PaneId, title: string, spec: unknown, key: string, list = false) => {
     const tabId = workspace.tabOf(near)?.id;
     if (tabId === undefined) return;
     const file = join(tabDirs.tabDir(tabId), `peek-${near}.json`);
     void Bun.write(file, JSON.stringify(spec)).then(() => {
-      openViewPopup(near, [...selfCommand(), "peek", file, "--pane", String(near), ...(list ? ["--list"] : [])], title, { width: 80, height: 80 }, true);
+      openViewPopup(near, [...selfCommand(), "peek", file, "--pane", String(near), ...(list ? ["--list"] : [])], title, { width: 80, height: 80 }, true, key);
       refresh();
     });
   };
@@ -227,8 +227,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     },
     runningCommand: (id) => runningCommands.get(id)?.commandLine,
     shellCommand: (text) => [process.env.SHELL ?? "/bin/sh", "-c", text],
-    peekReply: (near, title, text) => openPeek(near, title, peekSpec(title, text)),
-    pickReply: (near, title, choices) => openPeek(near, title, { title, replies: choices }, true),
+    peekReply: (near, title, text, key) => openPeek(near, title, peekSpec(title, text), key),
+    pickReply: (near, title, choices, key) => openPeek(near, title, { title, replies: choices }, key, true),
     composeClaude: (near, candidates, context) => {
       const awake = (id: PaneId) => nativeClaudes.has(id) && !workspace.dormant.has(id);
       const target = awake(near) ? near : (candidates.find(awake) ?? (nativeClaudes.has(near) ? near : candidates.find((id) => nativeClaudes.has(id))));
