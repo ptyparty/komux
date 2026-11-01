@@ -87,6 +87,7 @@ export class Workspace {
   readonly replies = new Map<PaneId, Reply[]>();
   private readonly beforeTurn = new Map<PaneId, AgentState | undefined>();
   private readonly quieted = new Set<PaneId>();
+  readonly wakeups = new Set<PaneId>();
   readonly activities = new Map<PaneId, string>();
   readonly modes = new Map<PaneId, string>();
   readonly dormant = new Set<PaneId>();
@@ -223,23 +224,32 @@ export class Workspace {
     }
   }
 
-  setAgentState(id: PaneId, state: AgentState | undefined, reply?: string, toast?: QuietToast): boolean {
+  setAgentState(id: PaneId, state: AgentState | undefined, reply?: string, toast?: QuietToast, wakeup = false): boolean {
     if (!this.tabOf(id)) return false;
     if (state === undefined) {
       this.agents.delete(id);
       this.beforeTurn.delete(id);
       this.quieted.delete(id);
+      this.wakeups.delete(id);
       return false;
     }
     this.markAgent(id);
-    if (state === "working" && this.hideOnReply.has(id)) this.popupExited(id);
-    const watching = id === this.focused || this.popup?.id === id;
     const previous = this.agents.get(id);
     const busy = previous === "working" || previous === "waiting";
+    if (state === "working" && wakeup && !busy) {
+      this.beforeTurn.set(id, previous);
+      this.quieted.delete(id);
+      this.wakeups.add(id);
+      return false;
+    }
+    const wokeUp = this.wakeups.delete(id);
+    if (state === "working" && this.hideOnReply.has(id)) this.popupExited(id);
+    const watching = id === this.focused || this.popup?.id === id;
     if (state === "working") this.quieted.delete(id);
     if (state === "working" && !busy) this.beforeTurn.set(id, previous);
     if (state === "done" && reply === undefined && !toast && this.quieted.has(id)) return false;
-    if (toast && state === "done") {
+    const quiet = toast ?? (wokeUp && reply === undefined ? "none" : undefined);
+    if (quiet && state === "done") {
       if (toast === "brief" && reply !== undefined) this.keepReply(id, { text: reply, at: this.now(), unread: false, toastUntil: watching ? undefined : this.now() + toastMs });
       const before = this.beforeTurn.has(id) ? this.beforeTurn.get(id) : busy ? undefined : previous;
       this.beforeTurn.delete(id);
@@ -251,7 +261,7 @@ export class Workspace {
     this.quieted.delete(id);
     if (state !== "working" && state !== "waiting") this.beforeTurn.delete(id);
     if (reply !== undefined) this.keepReply(id, { text: reply, at: this.now(), unread: !watching });
-    const changed = previous !== state;
+    const changed = previous !== state || wokeUp;
     this.agents.set(id, state);
     return changed && !watching && state !== "working";
   }
@@ -415,12 +425,13 @@ export class Workspace {
     if (index < 0) return;
     const tab = this.tabs[index]!;
     const name = job.name;
-    const [agent, reply, quiet] = [this.agents.get(job.id), this.replies.get(job.id), this.quieted.has(job.id)];
+    const [agent, reply, quiet, woken] = [this.agents.get(job.id), this.replies.get(job.id), this.quieted.has(job.id), this.wakeups.has(job.id)];
     const before = this.beforeTurn.has(job.id) ? { state: this.beforeTurn.get(job.id) } : undefined;
     this.forgetJob(job.id);
     if (agent) this.agents.set(job.id, agent);
     if (reply) this.replies.set(job.id, reply);
     if (quiet) this.quieted.add(job.id);
+    if (woken) this.wakeups.add(job.id);
     if (before) this.beforeTurn.set(job.id, before.state);
     this.host.untrackJob(job.id);
     this.paneNames.set(job.id, name);
@@ -955,6 +966,7 @@ export class Workspace {
     this.replies.delete(id);
     this.beforeTurn.delete(id);
     this.quieted.delete(id);
+    this.wakeups.delete(id);
     this.commands.delete(id);
     this.activities.delete(id);
     this.modes.delete(id);

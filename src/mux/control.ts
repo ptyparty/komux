@@ -15,7 +15,7 @@ export const controlRequest = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("agent.state"),
-    params: z.object({ paneId: z.number().int(), state: z.enum(["working", "waiting", "done", "clear"]), detail: z.string().optional(), sessionId: z.string().min(1).optional(), reply: z.string().optional(), toast: z.enum(["brief", "none"]).optional() }),
+    params: z.object({ paneId: z.number().int(), state: z.enum(["working", "waiting", "done", "clear"]), detail: z.string().optional(), sessionId: z.string().min(1).optional(), reply: z.string().optional(), toast: z.enum(["brief", "none"]).optional(), wakeup: z.boolean().optional() }),
   }),
   z.object({
     method: z.literal("pane.open"),

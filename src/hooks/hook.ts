@@ -12,14 +12,14 @@ export type HookInput = { hook_event_name?: string; message?: string; notificati
 type AgentStateRequest = Extract<ControlRequest, { method: "agent.state" }>;
 type AgentStateName = AgentStateRequest["params"]["state"];
 
-type StateUpdate = { state: AgentStateName; detail?: string; reply?: string; toast?: QuietToast; sessionId?: string };
+type StateUpdate = { state: AgentStateName; detail?: string; reply?: string; toast?: QuietToast; sessionId?: string; wakeup?: boolean };
 
 const maxReply = 8000;
 
 export function stateForEvent(input: HookInput): StateUpdate | undefined {
   switch (input.hook_event_name) {
     case "UserPromptSubmit":
-      return { state: "working" };
+      return isWakeup(input.prompt) ? { state: "working", wakeup: true } : { state: "working" };
     case "Stop": {
       const message = typeof input.last_assistant_message === "string" && input.last_assistant_message.trim() ? input.last_assistant_message : undefined;
       const toast = message === undefined ? undefined : replyToast(message);
@@ -36,6 +36,10 @@ export function stateForEvent(input: HookInput): StateUpdate | undefined {
     default:
       return undefined;
   }
+}
+
+export function isWakeup(prompt: unknown): boolean {
+  return typeof prompt === "string" && prompt.trimStart().startsWith("<task-notification>");
 }
 
 export function replyToast(reply: string): QuietToast | undefined {
@@ -403,9 +407,9 @@ async function reportSession(pane: AskOwner, sessionId: string): Promise<void> {
 }
 
 export async function reportState(pane: AskOwner, state: AgentStateName, update: Omit<StateUpdate, "state"> = {}): Promise<void> {
-  const { detail, sessionId, reply, toast } = update;
+  const { detail, sessionId, reply, toast, wakeup } = update;
   try {
-    await sendControl(pane.socket, { method: "agent.state", params: { paneId: pane.paneId, state, detail, sessionId, reply, toast } }, 1000);
+    await sendControl(pane.socket, { method: "agent.state", params: { paneId: pane.paneId, state, detail, sessionId, reply, toast, wakeup } }, 1000);
   } catch (error) {
     if (!(error instanceof ControlError)) throw error;
   }
