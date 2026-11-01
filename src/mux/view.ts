@@ -15,7 +15,7 @@ export class MuxView {
   private readonly body: BoxRenderable;
   private readonly modeBar: TextRenderable;
   private readonly trayBar: TextRenderable;
-  private trayRanges: { start: number; end: number; index: number }[] = [];
+  private trayRanges: { start: number; end: number; index: number; job?: PaneId }[] = [];
   private readonly jobsBar: TextRenderable;
   private jobRanges: { start: number; end: number; id: PaneId }[] = [];
   private readonly hintBar: TextRenderable;
@@ -53,7 +53,8 @@ export class MuxView {
     this.trayBar.onMouseDown = (event) => {
       const offset = event.x - this.trayBar.screenX;
       const hit = this.trayRanges.find((range) => offset >= range.start && offset < range.end);
-      if (hit) this.actions.onOpenWidget(hit.index);
+      if (hit?.job !== undefined) this.actions.onOpenJob(hit.job);
+      else if (hit) this.actions.onOpenWidget(hit.index);
     };
     this.jobsBar = new TextRenderable(renderer, { height: 1, flexShrink: 0, wrapMode: "none", bg: theme.surface });
     this.jobsBar.onMouseDown = (event) => {
@@ -249,7 +250,7 @@ export class MuxView {
         const color = state ? agentColors[state] : theme.muted;
         return [bold(fg(color)(` ${state ? agentBadges[state] : idleBadge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text), fg(theme.muted)(wakeup)];
       }
-      const line = this.actions.jobLine(job.id) || (job.state === "running" ? "no output yet" : jobDetail(job, Date.now()));
+      const line = this.workspace.jobTexts.get(job.id) ?? (this.actions.jobLine(job.id) || (job.state === "running" ? "no output yet" : jobDetail(job, Date.now())));
       const shown = fit(line, room);
       const color = job.state === "running" ? theme.text : commandColors[job.state];
       return [bold(fg(color)(` ${jobBadge(job)} ${name}`)), fg(theme.muted)(" │ "), fg(theme.muted)(shown)];
@@ -263,6 +264,7 @@ export class MuxView {
     this.toastTargets = toasts.map((toast) => (toast.kind === "job" ? toast.job.id : toast.id));
     if (toasts.length === 0) return;
     const lines = toasts.map((toast) => {
+      if (toast.kind === "note") return { text: `📣 ${toast.tab.name} › ${this.workspace.jobStatus(toast.id)?.name ?? "script"} · ${firstLine(toast.note.text, 60)}`, color: theme.text };
       if (toast.kind === "reply") {
         const name = this.workspace.paneNames.get(toast.id) ?? "Claude";
         if (toast.brief) return { text: `💬 ${toast.tab.name} › ${name} · ${firstLine(toast.reply.text, 60)}`, color: theme.muted };
@@ -454,6 +456,18 @@ export class MuxView {
     const parts: Part[] = [];
     let column = 0;
     this.trayRanges = [];
+    for (const job of this.workspace.tabJobs()) {
+      const text = this.workspace.trayTexts.get(job.id);
+      if (text === undefined || text === "") continue;
+      if (parts.length > 0) {
+        parts.push(fg(theme.border)("│"));
+        column += 1;
+      }
+      const label = ` ${fit(text, 30)} `;
+      parts.push(fg(theme.accent)(label));
+      this.trayRanges.push({ start: column, end: column + Bun.stringWidth(label), index: -1, job: job.id });
+      column += Bun.stringWidth(label);
+    }
     this.tray.texts.forEach((text, index) => {
       if (text === "") return;
       if (parts.length > 0) {

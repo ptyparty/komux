@@ -522,6 +522,24 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           workspace.popupExited(request.params.jobId);
           refresh();
           return { ok: true };
+        case "job.dock":
+          if (!workspace.setJobDock(request.params.jobId, request.params.text)) return { ok: false, error: `job ${request.params.jobId} was closed` };
+          refresh();
+          return { ok: true };
+        case "script.tray":
+          if (!panes.has(request.params.paneId)) return { ok: false, error: `no pane ${request.params.paneId}` };
+          workspace.setTrayText(request.params.paneId, request.params.text);
+          refresh();
+          return { ok: true };
+        case "script.toast":
+          if (!panes.has(request.params.paneId)) return { ok: false, error: `no pane ${request.params.paneId}` };
+          workspace.addNote(request.params.paneId, request.params.text);
+          refresh();
+          return { ok: true };
+        case "script.state": {
+          const state = workspace.scriptState(request.params.paneId);
+          return state ? { ok: true, result: state } : { ok: false, error: `no pane ${request.params.paneId}` };
+        }
         case "session.quit":
           workspace.quit = true;
           refresh();

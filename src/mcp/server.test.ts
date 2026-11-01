@@ -28,12 +28,12 @@ afterEach(async () => {
 const form = { title: "Pick", elements: [{ type: "confirm", id: "ok", label: "OK?" }] };
 
 describe("MCP server", () => {
-  test("lists ask and wait", async () => {
+  test("lists the ask and script tools", async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((tool) => tool.name).sort()).toEqual(["ask", "wait"]);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(["ask", "script_run", "script_send", "script_stop", "script_wait", "wait"]);
   });
 
-  test("marks both tools read-only so plan mode does not prompt for them", async () => {
+  test("marks every tool read-only so plan mode does not prompt for them", async () => {
     const { tools } = await client.listTools();
     for (const tool of tools) expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });

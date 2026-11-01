@@ -1,6 +1,6 @@
 ---
 name: qmux-ask
-description: Asks the user questions through a form that pops up in their terminal (a qmux popup, a zellij floating pane, or a tmux popup) and returns the answers as JSON, via the qmux `ask`/`wait` MCP tools or the `qmux ask` CLI. Use when you need the user to make a decision, pick between options, confirm a risky action, or answer several questions at once instead of asking in chat, and when the user says "ask me", "give me a form", "popup", or "qmux".
+description: Asks the user questions through a form that pops up in their terminal (a qmux popup, a zellij floating pane, or a tmux popup) and returns the answers as JSON, via the qmux `ask`/`wait` MCP tools or the `qmux ask` CLI. Use when you need the user to make a decision, pick between options, confirm a risky action, or answer several questions at once instead of asking in chat, and when the user says "ask me", "give me a form", "popup", or "qmux". For a live panel you keep updating, or a wizard with computed steps, use `qmux-script` instead.
 ---
 
 # Asking the user with qmux

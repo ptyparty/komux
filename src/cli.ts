@@ -10,6 +10,7 @@ import { formSpec, parseFormSpec, type FormSpec } from "./form/schema.ts";
 import { runHook, waitForAnswers } from "./hooks/hook.ts";
 import { sendControl } from "./mux/control.ts";
 import type { ReplyChoice } from "./mux/peek.ts";
+import { ScriptLaunchError, UnknownScriptError } from "./script/store.ts";
 import { defaultSessionName, listSessions, quitSession, SessionError } from "./mux/session/sessions.ts";
 
 const usage = `qmux: a terminal multiplexer agents can drive
@@ -39,6 +40,20 @@ Usage:
   qmux job run [--name NAME] [--wait] -- COMMAND...
       From inside a session, run COMMAND out of sight as a job in this tab; a toast says when it is done.
       Prints the job's id. With --wait, print the job's output as it runs and exit with its exit code.
+  qmux script run FILE.ts|- [--input JSON] [--name NAME] [--show] [--dock] [--wait] [--timeout SECONDS]
+      From inside a pane, run a TypeScript program as a job in a sandbox that can only draw qmux panels,
+      ask questions, toast, and set dock and tray text. It can't run commands, touch files or reach the network.
+      Prints {"id", ...}; with --wait, also waits for its first replies or its end.
+  qmux script send ID JSON
+      Deliver JSON to the script's qmux.onMessage handler.
+  qmux script wait ID [--timeout SECONDS]
+      Print the script's status and any replies not yet read, waiting for one if there are none.
+  qmux script stop ID
+      End a running script.
+  qmux script ls
+      List scripts and their status.
+  qmux script types
+      Print the TypeScript declarations of what a script can use.
   qmux ask [spec.json|-] [--wait] [--timeout SECONDS] [--host auto|qmux|zellij|tmux|none]
       Open a form for the user and print {"id", "host", "message", "status", ...}.
       With --wait, block until the user answers (or the timeout passes).
@@ -118,6 +133,8 @@ async function main(argv: string[]): Promise<void> {
       return jobCommand(rest);
     case "claude":
       return claudeCommand(rest);
+    case "script":
+      return scriptCommand(rest);
     case "server":
       return (await import("./mux/session/server.ts")).runServer(requireName(rest));
     case "help":
@@ -201,7 +218,7 @@ function hostOption(host: string | boolean | undefined): HostName {
 
 function requireId(positionals: string[]): string {
   const [id] = positionals;
-  if (!id) throw new UsageError("missing ask id");
+  if (!id) throw new UsageError("missing id");
   return id;
 }
 
@@ -450,6 +467,65 @@ async function claudeCommand(args: string[]): Promise<void> {
   );
 }
 
+async function scriptCommand(args: string[]): Promise<void> {
+  const [subcommand, ...rest] = args;
+  const { ScriptStore } = await import("./script/store.ts");
+  switch (subcommand) {
+    case "run": {
+      const { values, positionals } = parse(rest, {
+        input: { type: "string" },
+        name: { type: "string" },
+        show: { type: "boolean", default: false },
+        dock: { type: "boolean", default: false },
+        wait: { type: "boolean", default: false },
+        timeout: { type: "string" },
+      });
+      const source = positionals[0] === undefined || positionals[0] === "-" ? await Bun.stdin.text() : await Bun.file(positionals[0]).text();
+      const input = values.input === undefined ? null : jsonArg(values.input, "--input");
+      const store = new ScriptStore();
+      const { startScript } = await import("./script/run.ts");
+      const meta = await startScript(store, source, input, { name: values.name, show: values.show, dock: values.dock });
+      return print(values.wait ? await store.wait(meta.id, timeoutMs(values.timeout ?? "50")) : { id: meta.id, name: meta.name, status: "starting" });
+    }
+    case "send": {
+      const [id, message] = rest;
+      if (!id || message === undefined) throw new UsageError("qmux script send takes an id and a JSON message");
+      new ScriptStore().send(id, jsonArg(message, "the message"));
+      return;
+    }
+    case "wait": {
+      const { values, positionals } = parse(rest, { timeout: { type: "string" } });
+      return print(await new ScriptStore().wait(requireId(positionals), timeoutMs(values.timeout)));
+    }
+    case "stop": {
+      const store = new ScriptStore();
+      const [id] = rest;
+      if (!id) throw new UsageError("missing script id");
+      const { stopScript } = await import("./script/run.ts");
+      await stopScript(store, id);
+      return print(store.take(id));
+    }
+    case "ls":
+      return print(new ScriptStore().list().map(({ meta, status }) => ({ id: meta.id, name: meta.name, createdAt: meta.createdAt, status })));
+    case "types":
+      process.stdout.write(await Bun.file(new URL("./script/qmux-script.d.ts", import.meta.url)).text());
+      return;
+    case "host":
+      if (!rest[0]) throw new UsageError("missing script id");
+      return (await import("./script/host.ts")).runScriptHost(rest[0]);
+    default:
+      throw new UsageError(`unknown script command ${subcommand ?? ""}`.trim());
+  }
+}
+
+function jsonArg(text: string, what: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new UsageError(`${what} is not valid JSON: ${(error as Error).message}`);
+  }
+}
+
 async function jobCommand(args: string[]): Promise<void> {
   const [subcommand, ...rest] = args;
   if (subcommand !== "run") throw new UsageError(`unknown job command ${subcommand ?? ""}`.trim());
@@ -535,7 +611,7 @@ function requireName(args: string[]): string {
 }
 
 function isReportable(error: unknown): error is Error {
-  return [UnknownAskError, HostLaunchError, AlreadyAnsweredError, UnsafeDirectoryError, SessionError].some((type) => error instanceof type);
+  return [UnknownAskError, HostLaunchError, AlreadyAnsweredError, UnsafeDirectoryError, SessionError, UnknownScriptError, ScriptLaunchError].some((type) => error instanceof type);
 }
 
 function print(value: unknown): void {
