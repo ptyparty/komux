@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/qmux.svg" alt="A tall blue letter Q drawn as a terminal window split into panes, with a &gt; prompt for its tail" width="160"></p>
+<p align="center"><img src="docs/qmux.svg" alt="A blue letter Q drawn as a terminal window split into panes, with a &gt; prompt for its tail, shaded with a glass screen and a soft shadow" width="170"></p>
 
 <h1 align="center">qmux</h1>
 
