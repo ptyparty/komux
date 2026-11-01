@@ -63,6 +63,10 @@ Usage:
   qmux peek spec.json --pane ID [--list]
       Show an agent's reply (what Alt p opens); a typed reply is sent to pane ID.
       With --list, the file lists the agent's replies to pick one from.
+  qmux setup [--yes|--pick|--remove]
+      List qmux's Claude Code hooks, skill and rules and whether each is set up in Claude's config.
+      --yes sets up what is missing, --pick chooses in a form, --remove takes them out again.
+      Skills and rules are links into this checkout, so they follow it as it updates.
   qmux hooks [--install]
       List the Claude Code hooks qmux needs that are missing from your settings, or add them.
   qmux hook --wake
@@ -94,6 +98,8 @@ async function main(argv: string[]): Promise<void> {
       return peekCommand(rest);
     case "hooks":
       return hooksCommand(rest);
+    case "setup":
+      return setupCommand(rest);
     case "hook":
       return rest[0] === "--wake" ? wakeCommand() : hookCommand();
     case undefined:
@@ -246,6 +252,66 @@ async function readReplyList(source: string): Promise<{ title: string; replies: 
   if (replies.length === 0 || !replies.every(valid)) throw new UsageError(`${source} lists replies that each need a label and text`);
   const title = "title" in json && typeof json.title === "string" ? json.title : "Replies";
   return { title, replies };
+}
+
+async function setupCommand(args: string[]): Promise<void> {
+  const { values, positionals } = parse(args, { yes: { type: "boolean" }, pick: { type: "boolean" }, remove: { type: "boolean" } });
+  if (positionals.length > 0) throw new UsageError(`unexpected ${positionals[0]}`);
+  if ([values.yes, values.pick, values.remove].filter(Boolean).length > 1) throw new UsageError("give one of --yes, --pick and --remove");
+  const { setupItems, stateMarks } = await import("./claude/setup.ts");
+  const { claudeConfigDir } = await import("./claude/sessions.ts");
+  const items = await setupItems();
+  const width = Math.max(...items.map((item) => item.label.length));
+  const line = (item: (typeof items)[number], text: string) => `  ${stateMarks[item.state]} ${item.label.padEnd(width)}  ${text}`;
+  if (values.remove) {
+    for (const item of items) {
+      const outcome = await item.remove();
+      if (outcome) console.log(`  ${item.label.padEnd(width)}  ${outcome}`);
+    }
+    return;
+  }
+  const needed = items.filter((item) => item.state !== "installed");
+  let chosen = values.yes ? needed : [];
+  if (values.pick) {
+    const result = await (await import("./form/show.ts")).showForm(
+      {
+        title: "qmux setup",
+        description: `Claude Code's config in ${claudeConfigDir()}`,
+        elements: [
+          {
+            type: "choice",
+            id: "items",
+            label: "Set up",
+            multi: true,
+            other: false,
+            options: items.map((item) => ({ value: item.id, label: `${stateMarks[item.state]} ${item.label}`, description: item.detail })),
+            default: needed.map((item) => item.id),
+          },
+        ],
+        submitLabel: "Set up",
+      },
+      async () => {},
+    );
+    if (result.status !== "submitted") return;
+    const picked = new Set(Array.isArray(result.values.items) ? result.values.items : []);
+    chosen = items.filter((item) => picked.has(item.id) && item.state !== "installed");
+  }
+  if (!values.yes && !values.pick) {
+    console.log(`Claude Code setup for qmux, in ${claudeConfigDir()}:\n`);
+    for (const item of items) console.log(line(item, item.detail));
+    if (needed.length > 0) console.log(`\nRun \`qmux setup --yes\` to set up the ${needed.length} not marked ✓, or \`qmux setup --pick\` to choose.`);
+    return;
+  }
+  if (chosen.length === 0) return console.log("Nothing to set up.");
+  let failed = false;
+  for (const item of chosen) {
+    const outcome = await item.apply().then(
+      (done) => `${stateMarks.installed} ${item.label.padEnd(width)}  ${done}`,
+      (error: Error) => ((failed = true), `${stateMarks.missing} ${item.label.padEnd(width)}  ${error.message}`),
+    );
+    console.log(`  ${outcome}`);
+  }
+  if (failed) process.exitCode = 1;
 }
 
 async function hooksCommand(args: string[]): Promise<void> {

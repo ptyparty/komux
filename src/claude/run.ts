@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { ControlError, sendControl } from "../mux/control.ts";
 import { theme } from "../mux/theme.ts";
 import { decidePermission } from "./permissions.ts";
-import { declineHooks, defaultHookCommand, hooksDeclined, installHooks, missingHooks, readSettings, settingsPaths, writeSettings } from "./hooks-setup.ts";
+import { declineItems, declinedItems, setupItems } from "./setup.ts";
 import { pick } from "./picker.ts";
-import { pastSessions, pickerItems, projectDir, readHistory, runningSessions, sessionIds, type Choice, type LiveSession } from "./sessions.ts";
+import { claudeConfigDir, pastSessions, pickerItems, projectDir, readHistory, runningSessions, sessionIds, type Choice, type LiveSession } from "./sessions.ts";
 import { ClaudeSession } from "./session.ts";
 import { reportState } from "../hooks/hook.ts";
 import { askOwner } from "../ask/ask.ts";
@@ -46,7 +46,7 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
     }
     if (inbox) choice = await wakeAndChoose(renderer, inbox);
     else {
-      if (process.env.QMUX_SOCKET) await offerHooks(renderer);
+      if (process.env.QMUX_SOCKET) await offerSetup(renderer);
       if (options.pick) choice = await chooseSession(renderer);
     }
     if (choice?.kind === "focus" && !(await focusPane(choice.paneId))) choice = { kind: "resume", sessionId: choice.sessionId };
@@ -127,27 +127,23 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
   if (id) console.log(`Continue this conversation with: claude --resume ${id}`);
 }
 
-async function offerHooks(renderer: CliRenderer): Promise<void> {
-  if (await hooksDeclined()) return;
-  const paths = settingsPaths();
-  let settings, local;
+async function offerSetup(renderer: CliRenderer): Promise<void> {
+  let items;
   try {
-    [settings, local] = await Promise.all([readSettings(paths.user), readSettings(paths.local)]);
+    const declined = await declinedItems();
+    items = (await setupItems()).filter((item) => (item.id === "hooks" ? item.state === "missing" || item.state === "outdated" : item.state === "missing") && !declined.has(item.id));
   } catch {
     return;
   }
-  const missing = missingHooks([settings, local]);
-  if (missing.length === 0) return;
+  if (items.length === 0) return;
   await showIfJob();
-  const answer = await pick(renderer, "qmux hooks", `${missing.length} missing or out of date in ${paths.user}`, [
-    { label: "Install them", detail: missing.map((hook) => hook.label).join(" · "), value: "install" },
+  const answer = await pick(renderer, "qmux setup", `${items.length} missing or out of date in ${claudeConfigDir()}`, [
+    { label: "Set them up", detail: items.map((item) => item.label).join(" · "), value: "install" },
     { label: "Not now", detail: "ask again next time", value: "later" },
-    { label: "Don't ask again", detail: "`qmux hooks --install` installs them any time", value: "never" },
+    { label: "Don't ask again", detail: "`qmux setup` lists them, and `qmux setup --pick` chooses", value: "never" },
   ]);
-  try {
-    if (answer === "install") await writeSettings(paths.user, installHooks(settings, [local], defaultHookCommand()));
-    if (answer === "never") await declineHooks();
-  } catch {}
+  if (answer === "install") for (const item of items) await item.apply().catch(() => undefined);
+  if (answer === "never") await declineItems(items.map((item) => item.id)).catch(() => undefined);
 }
 
 async function chooseSession(renderer: CliRenderer): Promise<Choice | undefined> {
@@ -244,12 +240,12 @@ function runningAsJob(): boolean {
 }
 
 async function wakeAndChoose(renderer: CliRenderer, inbox: Inbox): Promise<Choice | undefined> {
-  let hooksOffered = false;
+  let setupOffered = false;
   for (;;) {
     await dormant(renderer, inbox);
-    if (!hooksOffered) {
-      await offerHooks(renderer);
-      hooksOffered = true;
+    if (!setupOffered) {
+      await offerSetup(renderer);
+      setupOffered = true;
     }
     const choice = await chooseSession(renderer);
     if (choice) return choice;
