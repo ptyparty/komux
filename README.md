@@ -16,7 +16,7 @@ bun link                        # puts `qmux` on PATH
 claude mcp add qmux -- qmux mcp # gives Claude Code the ask and wait tools
 ```
 
-Copy or symlink `skills/qmux-ask` into `~/.claude/skills/` so agents know when and how to ask.
+Copy or symlink `skills/qmux-ask` into `~/.claude/skills/` so agents know when and how to ask. Do the same with the files in `rules/` into `~/.claude/rules/`: `qmux-jobs.md` has Claude run long commands as qmux jobs with short names, and `qmux-replies.md` lets it quiet replies that need nothing from you.
 
 The `ask` and `wait` tools are marked read-only, so Claude Code can use them in plan mode without asking permission.
 
