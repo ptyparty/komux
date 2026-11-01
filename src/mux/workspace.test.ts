@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { paneIds } from "./layout.ts";
 import { configSchema } from "./config.ts";
+import type { ReplyChoice } from "./peek.ts";
 import type { Project } from "./projects.ts";
 import { Workspace, type InputKey, type PaneHost } from "./workspace.ts";
 
@@ -46,6 +47,10 @@ class FakeHost implements PaneHost {
   peeked: [number, string, string][] = [];
   peekReply(near: number, title: string, text: string): void {
     this.peeked.push([near, title, text]);
+  }
+  picked: [number, string, ReplyChoice[]][] = [];
+  pickReply(near: number, title: string, choices: ReplyChoice[]): void {
+    this.picked.push([near, title, choices]);
   }
   composeClaude(near: number, candidates: number[]): string | undefined {
     const target = this.claudes.has(near) ? near : candidates.find((id) => this.claudes.has(id));
@@ -1396,6 +1401,125 @@ describe("Workspace", () => {
       const empty = new Workspace(new FakeHost());
       press(empty, "alt+p");
       expect(empty.message).toBe("No agent reply to show");
+    });
+
+    test("a reply marked for no toast leaves the tab as it was before the turn", () => {
+      const { workspace } = ide({ now: 5 });
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      workspace.setAgentState(agent, "working");
+      expect(workspace.setAgentState(agent, "done", "That was my own edit.", "none")).toBe(false);
+      expect(workspace.agents.get(agent)).toBe("done");
+      expect(workspace.toasts()).toMatchObject([{ kind: "reply", reply: { text: "Shall I start?" }, brief: false }]);
+      expect(workspace.latestReply(agent)?.text).toBe("Shall I start?");
+      expect(workspace.replies.get(agent)).toHaveLength(1);
+      workspace.seeReply(agent);
+      workspace.agents.delete(agent);
+      workspace.setAgentState(agent, "working");
+      workspace.setAgentState(agent, "done", "Nothing new.", "none");
+      expect(workspace.agents.has(agent)).toBe(false);
+      expect(workspace.setAgentState(agent, "done")).toBe(false);
+      expect(workspace.agents.has(agent)).toBe(false);
+      workspace.setAgentState(agent, "working");
+      expect(workspace.setAgentState(agent, "done")).toBe(true);
+    });
+
+    test("a quiet reply keeps a badge it can't place in a turn, and drops one you saw mid-turn", () => {
+      const { workspace } = ide({ now: 5 });
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      const elsewhere = workspace.active;
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      workspace.setAgentState(agent, "done", "Nothing new.", "none");
+      expect(workspace.agents.get(agent)).toBe("done");
+      workspace.setAgentState(agent, "working");
+      workspace.focusPane(agent);
+      press(workspace, "x");
+      workspace.active = elsewhere;
+      workspace.setAgentState(agent, "done", "Build passed.", "brief");
+      expect(workspace.agents.has(agent)).toBe(false);
+    });
+
+    test("a brief reply toasts for five seconds and keeps the unread reply's toast", () => {
+      const clock = { now: 5 };
+      const { workspace } = ide(clock);
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      workspace.setAgentState(agent, "working");
+      expect(workspace.setAgentState(agent, "done", "Build passed.", "brief")).toBe(false);
+      expect(workspace.toasts()).toMatchObject([
+        { kind: "reply", reply: { text: "Build passed." }, brief: true },
+        { kind: "reply", reply: { text: "Shall I start?" }, brief: false },
+      ]);
+      expect(workspace.nextToastExpiry()).toBe(5000);
+      expect(workspace.latestReply(agent)?.text).toBe("Shall I start?");
+      clock.now += 5000;
+      expect(workspace.toasts()).toMatchObject([{ reply: { text: "Shall I start?" } }]);
+      expect(workspace.replies.get(agent)?.map((reply) => reply.text)).toEqual(["Shall I start?", "Build passed."]);
+    });
+
+    test("Alt p goes to the agent whose unread reply is newest, not whose last reply is", () => {
+      const clock = { now: 1 };
+      const { host, workspace } = ide(clock);
+      const [first, second] = paneIds(workspace.tab.root) as [number, number];
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(first, "done", "older question");
+      clock.now = 5;
+      workspace.setAgentState(second, "done", "newer question");
+      clock.now = 10;
+      workspace.setAgentState(first, "working");
+      workspace.setAgentState(first, "done", "Build passed.", "brief");
+      press(workspace, "alt+p");
+      expect(host.picked).toEqual([]);
+      expect(host.peeked.map(([id, , text]) => [id, text])).toEqual([[second, "newer question"]]);
+    });
+
+    test("Alt p opens a lone reply and lists the agent's replies when there is a choice", () => {
+      const clock = { now: 0 };
+      const { host, workspace } = ide(clock);
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      const elsewhere = workspace.active;
+      workspace.setAgentState(agent, "done", "first");
+      press(workspace, "alt+p");
+      expect(host.peeked.map(([, , text]) => text)).toEqual(["first"]);
+      press(workspace, "alt+p");
+      expect(host.peeked.map(([, , text]) => text)).toEqual(["first", "first"]);
+      clock.now = 120_000;
+      workspace.active = elsewhere;
+      workspace.setAgentState(agent, "done", "second");
+      press(workspace, "alt+p");
+      expect(host.peeked.map(([, , text]) => text)).toEqual(["first", "first", "second"]);
+      workspace.active = elsewhere;
+      workspace.setAgentState(agent, "done", "**third**\nmore");
+      workspace.setAgentState(agent, "done", "fourth");
+      press(workspace, "alt+p");
+      expect(host.picked).toHaveLength(1);
+      const [near, title, choices] = host.picked[0]!;
+      expect([near, title]).toEqual([agent, "Claude · merlot"]);
+      expect(choices.map((choice) => choice.label)).toEqual(["just now  new  fourth", "just now  new  third", "just now       second", "2m ago         first"]);
+      expect(choices[1]!.text).toBe("**third**\nmore");
+      expect(workspace.toasts()).toEqual([]);
+      for (let n = 0; n < 12; n += 1) workspace.setAgentState(agent, "done", `reply ${n}`);
+      expect(workspace.replies.get(agent)).toHaveLength(10);
+      expect(workspace.replies.get(agent)?.[0]?.text).toBe("reply 2");
+    });
+
+    test("an unread reply outlasts ten newer read ones", () => {
+      const { workspace } = ide({ now: 5 });
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      for (let n = 0; n < 12; n += 1) {
+        workspace.setAgentState(agent, "working");
+        workspace.setAgentState(agent, "done", `event ${n}`, "brief");
+      }
+      const kept = workspace.replies.get(agent)!.map((reply) => reply.text);
+      expect(kept).toHaveLength(10);
+      expect(kept[0]).toBe("Shall I start?");
+      expect(kept.at(-1)).toBe("event 11");
     });
 
     test("Ctrl+t R rebuilds the tab from its layout after you type its name", () => {

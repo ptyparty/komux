@@ -1,6 +1,7 @@
 import { BoxRenderable, TextRenderable, bg, bold, fg, type CliRenderer, type StyledText } from "@opentui/core";
 import { styled, type Part } from "../ui/styled.ts";
 import { hints, modeHints, type Hint, type Mode } from "./keymap.ts";
+import { firstLine, fit } from "./fit.ts";
 import { JobsPanel, jobBadge, jobDetail } from "./jobs-panel.ts";
 import { Launcher } from "./launcher.ts";
 import { paneIds, shownPaneTab, type LayoutNode, type PaneId, type TabsNode } from "./layout.ts";
@@ -237,7 +238,7 @@ export class MuxView {
       const name = fit(job.name, nameWidth, true);
       const state = this.workspace.agents.get(job.id);
       if (job.agent) {
-        const reply = this.workspace.replies.get(job.id);
+        const reply = this.workspace.latestReply(job.id);
         const mode = this.workspace.modes.get(job.id);
         const modeLabel = mode ? `${mode} · ` : "";
         const textRoom = Math.max(room - Bun.stringWidth(modeLabel), 1);
@@ -262,6 +263,7 @@ export class MuxView {
     const lines = toasts.map((toast) => {
       if (toast.kind === "reply") {
         const name = this.workspace.paneNames.get(toast.id) ?? "Claude";
+        if (toast.brief) return { text: `💬 ${toast.tab.name} › ${name} · ${firstLine(toast.reply.text, 60)}`, color: theme.muted };
         return { text: `💬 ${toast.tab.name} › ${name} · ${firstLine(toast.reply.text, 60)} · Alt p peek · Alt x dismiss`, color: theme.accent };
       }
       const { job } = toast;
@@ -511,20 +513,6 @@ function hintParts(mode: Mode, list: Hint[] = hints(mode)): Part[] {
     parts.push(bold(fg(theme.accent)(hint.keys)), fg(theme.muted)(` ${hint.description}`));
   });
   return parts;
-}
-
-function firstLine(text: string, max: number): string {
-  return fit(text.split("\n").find((candidate) => candidate.trim())?.replace(/[*_`#>]/g, "").trim() ?? "", max);
-}
-
-function fit(text: string, width: number, pad = false): string {
-  if (Bun.stringWidth(text) <= width) return pad ? text + " ".repeat(width - Bun.stringWidth(text)) : text;
-  let cut = "";
-  for (const char of text) {
-    if (Bun.stringWidth(cut + char) > width - 1) break;
-    cut += char;
-  }
-  return `${cut}…${pad ? " ".repeat(Math.max(width - 1 - Bun.stringWidth(cut), 0)) : ""}`;
 }
 
 function plainWidth(text: StyledText | string): number {
