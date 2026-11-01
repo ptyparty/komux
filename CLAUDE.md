@@ -15,6 +15,7 @@ Default to using Bun instead of Node.js.
 - `src/mcp/`: the MCP server.
 - `src/cli.ts`: the `qmux` command.
 - `skills/qmux-ask/`: the agent skill.
+- `rules/`: Claude Code rules for sessions inside qmux, linked into `~/.claude/rules`.
 
 ## Testing
 
