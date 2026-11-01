@@ -14,9 +14,10 @@ A terminal multiplexer that agents can drive. Phase 1 is the agent forms layer: 
 bun install
 bun link                        # puts `qmux` on PATH
 claude mcp add qmux -- qmux mcp # gives Claude Code the ask and wait tools
+qmux setup --yes                # adds qmux's hooks, skill and rules to Claude Code's config
 ```
 
-Copy or symlink `skills/qmux-ask` into `~/.claude/skills/` so agents know when and how to ask. Do the same with the files in `rules/` into `~/.claude/rules/`: `qmux-jobs.md` has Claude run long commands as qmux jobs with short names, and `qmux-replies.md` lets it quiet replies that need nothing from you.
+`qmux setup` lists what qmux adds to Claude Code's config and whether each part is there: the hooks below, the `qmux-ask` skill so agents know when and how to ask, and two rules. `qmux-jobs` has Claude run long commands as qmux jobs with short names, and `qmux-replies` lets it quiet replies that need nothing from you. `--yes` sets up whatever is missing, `--pick` lets you choose in a form, and `--remove` takes it all out again. The skill and rules are links into this checkout, so they follow it as you update it. Anything else already there under the same name is moved to `~/.claude/qmux-backup/` and put back by `--remove`; `qmux claude`'s offer only adds what is missing, and leaves moving things aside to `qmux setup`. `qmux claude` offers the same when it starts inside qmux.
 
 The `ask` and `wait` tools are marked read-only, so Claude Code can use them in plan mode without asking permission.
 
@@ -181,7 +182,7 @@ When the terminal qmux is attached to supports kitty graphics, programs in panes
 
 ## Claude Code hooks
 
-`qmux hook` lets Claude Code sessions running in qmux panes report what they are doing. `qmux hooks` lists any that are missing from your settings and `qmux hooks --install` adds them, keeping the old file as `settings.json.qmux-backup`. `qmux claude` offers the same when it starts inside qmux. Point these hook events at it in `~/.claude/settings.json`: `UserPromptSubmit`, `Stop`, `SessionEnd`, `Notification` (matcher `*`) and `PermissionRequest` (matcher `*`, with a long timeout such as 3600 seconds):
+`qmux hook` lets Claude Code sessions running in qmux panes report what they are doing. `qmux setup` adds them, as does `qmux hooks --install`, which handles only the hooks; both keep the old file as `settings.json.qmux-backup`. Point these hook events at it in `~/.claude/settings.json`: `UserPromptSubmit`, `Stop`, `SessionEnd`, `Notification` (matcher `*`) and `PermissionRequest` (matcher `*`, with a long timeout such as 3600 seconds):
 
 ```json
 { "type": "command", "command": "qmux hook" }

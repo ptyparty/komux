@@ -128,6 +128,26 @@ export function installHooks(target: Settings, others: Settings[], fallbackComma
   return { ...target, hooks };
 }
 
+export function removeHooks(target: Settings): Settings {
+  const hooks: Record<string, HookGroup[]> = {};
+  for (const [event, groups] of Object.entries(target.hooks ?? {})) {
+    const kept = groups.flatMap((group) => {
+      if (!group.hooks) return [group];
+      const left = group.hooks.filter((hook) => !isQmuxHook(hook.command, false) && !isQmuxHook(hook.command, true));
+      return left.length > 0 ? [{ ...group, hooks: left }] : [];
+    });
+    if (kept.length > 0) hooks[event] = kept;
+  }
+  const { hooks: _, ...rest } = target;
+  return Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
+}
+
+export function hasQmuxHooks(target: Settings): boolean {
+  return Object.values(target.hooks ?? {})
+    .flat()
+    .some((group) => (group.hooks ?? []).some((hook) => isQmuxHook(hook.command, false) || isQmuxHook(hook.command, true)));
+}
+
 export async function readSettings(path: string): Promise<Settings> {
   const file = Bun.file(path);
   return (await file.exists()) ? ((await file.json()) as Settings) : {};
@@ -145,14 +165,10 @@ export async function writeSettings(path: string, settings: Settings): Promise<s
   return backup;
 }
 
+export function qmuxStateDir(): string {
+  return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "qmux");
+}
+
 export function declinedPath(): string {
-  return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "qmux", "hooks-declined");
-}
-
-export function hooksDeclined(): Promise<boolean> {
-  return Bun.file(declinedPath()).exists();
-}
-
-export async function declineHooks(): Promise<void> {
-  await Bun.write(declinedPath(), "");
+  return join(qmuxStateDir(), "hooks-declined");
 }

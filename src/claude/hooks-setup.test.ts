@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { selfCommand, shellWords } from "../ask/hosts.ts";
-import { defaultHookCommand, installHooks, missingHooks, type Settings } from "./hooks-setup.ts";
+import { defaultHookCommand, hasQmuxHooks, installHooks, missingHooks, removeHooks, type Settings } from "./hooks-setup.ts";
 
 const ours = "/home/me/.bun/bin/bun /home/me/.bun/bin/qmux hook";
 const hook = (timeout: number) => [{ type: "command", command: ours, timeout }];
@@ -80,5 +80,13 @@ describe("qmux hooks in Claude settings", () => {
     expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).toEndWith(" hook");
     expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).not.toBe("qmux hook");
     expect(defaultHookCommand(() => null)).not.toBe("qmux hook");
+  });
+  test("removing takes out only qmux's hooks", () => {
+    const installed = installHooks(current, [], ours);
+    expect(hasQmuxHooks(installed)).toBe(true);
+    const removed = removeHooks(installed);
+    expect(hasQmuxHooks(removed)).toBe(false);
+    expect(removed).toEqual({ model: "opus", hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "prettier --write" }] }] } });
+    expect(removeHooks({ hooks: { Stop: [{ hooks: hook(10) }] } })).toEqual({});
   });
 });
