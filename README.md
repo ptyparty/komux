@@ -4,6 +4,10 @@
 
 A terminal multiplexer that agents can drive. Phase 1 is the agent forms layer: an agent asks the user questions, a form pops up in their terminal, and the answers come back as JSON. The form opens as a popup when the agent runs inside qmux, or in a zellij floating pane or a tmux popup.
 
+![qmux running quoll, remax and a docked native Claude that asks a question through a popup](docs/qmux.gif)
+
+*A tab in the `ide` layout: quoll on the left, remax on the right, and native Claude docked below. Alt+c sends Claude a bug to fix. quoll follows the plan as Claude writes it, Claude asks how to round through a qmux popup, and remax follows the edit when it lands. Then the dock shows Claude's reply, Alt+p opens it, and Alt+j opens the conversation. Waiting on the model is time-lapsed.*
+
 ## Setup
 
 ```bash
@@ -214,3 +218,5 @@ Outside qmux, `qmux hook` exits at once and does nothing.
 bun test
 bun check
 ```
+
+`scripts/hero-cast` regenerates `docs/qmux.gif`. It runs a real Claude Code session, so each take costs model calls and comes out a little different. It builds a demo checkout from `scripts/hero-fixture` in `/tmp/demo`, gives qmux, fish and Claude Code a scratch config there, and runs qmux, quoll and remax from the ptyparty checkouts beside this one (`PTYPARTY_DIR` points elsewhere). It drives the session in a pty and draws each frame with Pillow. It needs `python3`, `fish`, `remax` on the PATH and a monospace TTF; pyte and Pillow install into a scratch venv on the first run.
