@@ -246,9 +246,9 @@ export class MuxView {
         const wakeup = wakingUp && room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeupLabel) >= 10 ? wakeupLabel : "";
         const textRoom = Math.max(room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeup), 1);
         const activity = this.workspace.dormant.has(job.id) ? "not started · Alt c" : state === "working" || wakingUp ? this.workspace.activities.get(job.id) : undefined;
-        const text = activity ? fit(activity, textRoom) : reply ? firstLine(reply.text, textRoom) : fit(state ? agentLabels[state] : "ready", textRoom);
-        const color = state ? agentColors[state] : theme.muted;
-        return [bold(fg(color)(` ${state ? agentBadges[state] : idleBadge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text), fg(theme.muted)(wakeup)];
+        const look = this.agentLook(job.id, state);
+        const text = activity ? fit(activity, textRoom) : reply ? firstLine(reply.text, textRoom) : fit(look.label, textRoom);
+        return [bold(fg(look.color)(` ${look.badge} ${name}`)), fg(theme.muted)(` │ ${modeLabel}`), fg(theme.text)(text), fg(theme.muted)(wakeup)];
       }
       const line = this.workspace.jobTexts.get(job.id) ?? (this.actions.jobLine(job.id) || (job.state === "running" ? "no output yet" : jobDetail(job, Date.now())));
       const shown = fit(line, room);
@@ -422,6 +422,13 @@ export class MuxView {
     return styled(parts);
   }
 
+  private agentLook(id: PaneId, state: AgentState | undefined): { badge: string; label: string; color: string } {
+    if (state) return { badge: agentBadges[state], label: agentLabels[state], color: agentColors[state] };
+    const awaited = this.workspace.awaitedJobs(id);
+    if (awaited > 0) return { badge: awaitingBadge, label: awaitingLabel(awaited), color: theme.text };
+    return { badge: idleBadge, label: "ready", color: theme.muted };
+  }
+
   private renderJobChips(used: number): StyledText {
     this.jobRanges = [];
     const jobs = this.workspace.tabJobs().filter((job) => !job.dock);
@@ -429,7 +436,7 @@ export class MuxView {
     if (jobs.length === 0 || room < 4) return styled([]);
     const chips = jobs.map((job) => {
       const state = job.agent ? this.workspace.agents.get(job.id) : undefined;
-      const badge = job.agent ? (state ? agentBadges[state] : idleBadge) : jobBadge(job);
+      const badge = job.agent ? this.agentLook(job.id, state).badge : jobBadge(job);
       const color = state ? agentColors[state] : job.state === "running" ? theme.text : commandColors[job.state];
       return { id: job.id, badge, name: job.name, color };
     });
@@ -511,6 +518,7 @@ const slideFrameMs = 15;
 const defaultPopupSize = { width: 80, height: 80 };
 const agentBadges: Record<AgentState, string> = { working: "🧠", waiting: "!", done: "🚀", failed: "✗" };
 const idleBadge = "💤";
+const awaitingBadge = "⌛";
 const wakeupLabel = " · handling a job event";
 const agentLabels: Record<AgentState, string> = { working: "working", waiting: "needs you", done: "done", failed: "failed" };
 const agentColors: Record<AgentState, string> = { working: theme.accent, waiting: theme.warning, done: theme.modes.normal, failed: theme.modes.locked };
@@ -531,6 +539,10 @@ function hintParts(mode: Mode, list: Hint[] = hints(mode)): Part[] {
     parts.push(bold(fg(theme.accent)(hint.keys)), fg(theme.muted)(` ${hint.description}`));
   });
   return parts;
+}
+
+function awaitingLabel(jobs: number): string {
+  return jobs === 1 ? "waiting on a job" : `waiting on ${jobs} jobs`;
 }
 
 function plainWidth(text: StyledText | string): number {

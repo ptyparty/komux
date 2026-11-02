@@ -12,7 +12,7 @@ export type PopupSize = { width: number; height: number };
 export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "view" | "job"; askingPane?: PaneId; size?: PopupSize; hidden?: boolean; key?: string };
 
 export type JobState = "running" | "succeeded" | "failed";
-export type Job = { id: PaneId; tabId: number; name: string; command?: string[]; state: JobState; code?: number | null; started: number; finished?: number; seen: boolean; agent?: boolean; dock: boolean; layout?: boolean };
+export type Job = { id: PaneId; tabId: number; name: string; command?: string[]; state: JobState; code?: number | null; started: number; finished?: number; seen: boolean; agent?: boolean; dock: boolean; layout?: boolean; startedBy?: PaneId };
 export type Reply = { text: string; at: number; unread: boolean; toastUntil?: number };
 export type Note = { id: PaneId; text: string; until: number };
 export type Toast = { kind: "job"; job: Job; tab: Tab } | { kind: "reply"; id: PaneId; reply: Reply; tab: Tab; brief: boolean } | { kind: "note"; id: PaneId; note: Note; tab: Tab };
@@ -394,13 +394,17 @@ export class Workspace {
     return left.length > 0 ? Math.max(Math.min(...left), 0) : undefined;
   }
 
-  runJob(near: PaneId, command: string[], name?: string, from: { cwd?: string; env?: Record<string, string>; dock?: boolean } = {}): PaneId | undefined {
+  runJob(near: PaneId, command: string[], name?: string, from: { cwd?: string; env?: Record<string, string>; dock?: boolean; startedBy?: PaneId } = {}): PaneId | undefined {
     const tab = this.tabOf(near);
     if (!tab) return undefined;
     const id = this.nextPaneId++;
     this.host.createJob(id, from.cwd ?? this.host.cwd(near), command, tab.id, from.env);
-    this.jobs.push({ id, tabId: tab.id, name: name ?? command.join(" "), command, state: "running", started: this.now(), seen: false, dock: from.dock ?? false });
+    this.jobs.push({ id, tabId: tab.id, name: name ?? command.join(" "), command, state: "running", started: this.now(), seen: false, dock: from.dock ?? false, startedBy: from.startedBy });
     return id;
+  }
+
+  awaitedJobs(id: PaneId): number {
+    return this.jobs.filter((job) => job.startedBy === id && job.state === "running").length;
   }
 
   jobFinished(id: PaneId, code: number | null): void {
@@ -464,6 +468,7 @@ export class Workspace {
     }
     this.host.rerun(job.id);
     this.modes.delete(job.id);
+    for (const started of this.jobs) if (started.startedBy === job.id) started.startedBy = undefined;
     Object.assign(job, { state: "running", code: undefined, started: this.now(), finished: undefined, seen: false, agent: false });
   }
 

@@ -453,8 +453,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           return paneId === undefined ? { ok: false, error: `no pane ${near}` } : { ok: true, result: { paneId } };
         }
         case "job.run": {
-          const { near, command, name, cwd, env } = request.params;
-          const jobId = workspace.runJob(near, command, name, { cwd, env });
+          const { near, command, name, cwd, env, awaited } = request.params;
+          const jobId = workspace.runJob(near, command, name, { cwd, env, startedBy: awaited ? near : undefined });
           refresh();
           if (jobId === undefined) return { ok: false, error: `no pane ${near}` };
           return { ok: true, result: { jobId, log: jobLogs.get(jobId)?.path } };
