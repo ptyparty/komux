@@ -11,29 +11,29 @@ import { ScriptStore } from "../script/store.ts";
 
 const defaultWaitSeconds = 50;
 
-const askDescription = `Ask the user questions in a form that pops up in their terminal (a popup in qmux, a floating pane in zellij, or a popup in tmux), and get their answers back as JSON.
+const askDescription = `Ask the user questions in a form that pops up in their terminal (a popup in komux, a floating pane in zellij, or a popup in tmux), and get their answers back as JSON.
 
 Use it when you need a decision, a choice between options, or several answers at once. It is quicker for the user than typing replies in chat. Element types: text, confirm (yes/no), choice (single or multi, with an automatic "Other" free-text option), number (bounded), note (display-only text), markdown (display-only, rendered markdown for longer content), image (display-only, a picture such as a screenshot shown from a file path), and slides (several images the user pages through one at a time, leaving an optional note on each; the answer is one note per slide). Use \`when\` to show an element only when an earlier answer calls for it.
 
 The result is {"status":"submitted","values":{...}} with one entry per visible element, {"status":"cancelled"} if the user dismissed the form, or {"status":"pending"} if they have not answered within wait_seconds. When it is pending, call the wait tool with the returned id.`;
 
-const scriptDescription = `Run a TypeScript program in a sandbox inside the user's qmux, as a job in your tab. Use it for UI a single form can't do: a live checklist or progress panel you update as you work, a multi-step wizard, a table the user picks rows from.
+const scriptDescription = `Run a TypeScript program in a sandbox inside the user's komux, as a job in your tab. Use it for UI a single form can't do: a live checklist or progress panel you update as you work, a multi-step wizard, a table the user picks rows from.
 
-The sandbox can only draw qmux things. It has no fetch, files, processes, modules or Node/Bun APIs; it sees the JSON \`input\` you pass and a \`qmux\` object:
-- qmux.render(elements): the panel's content. Elements: {type:"text", text, style?}, {type:"markdown", text}, {type:"progress", value, max, label?}, {type:"list", id, items:[{value, text, mark?, detail?}]}, {type:"table", id?, columns, rows}, {type:"buttons", id, options}, {type:"divider"}.
-- qmux.show() / qmux.hide(): pop the panel up over the tab, or tuck it away (Alt j toggles it too).
-- qmux.dock(text|null), qmux.tray(text|null), qmux.toast(text): a dock row, a chip by the tray, a brief toast.
-- await qmux.ask(form): a qmux form (no image or slides elements); resolves to {status, values}.
-- await qmux.state(): tab, pane and job names and agent and job states. No screen text.
-- qmux.onEvent(fn): {type:"select", id, value} when the user presses Enter on a list item, table row or button; {type:"key", key} for other keys.
-- qmux.onMessage(fn): messages you send with script_send.
-- qmux.reply(json): a reply you read with script_wait. qmux.exit(json?): end the script.
+The sandbox can only draw komux things. It has no fetch, files, processes, modules or Node/Bun APIs; it sees the JSON \`input\` you pass and a \`komux\` object:
+- komux.render(elements): the panel's content. Elements: {type:"text", text, style?}, {type:"markdown", text}, {type:"progress", value, max, label?}, {type:"list", id, items:[{value, text, mark?, detail?}]}, {type:"table", id?, columns, rows}, {type:"buttons", id, options}, {type:"divider"}.
+- komux.show() / komux.hide(): pop the panel up over the tab, or tuck it away (Alt j toggles it too).
+- komux.dock(text|null), komux.tray(text|null), komux.toast(text): a dock row, a chip by the tray, a brief toast.
+- await komux.ask(form): a komux form (no image or slides elements); resolves to {status, values}.
+- await komux.state(): tab, pane and job names and agent and job states. No screen text.
+- komux.onEvent(fn): {type:"select", id, value} when the user presses Enter on a list item, table row or button; {type:"key", key} for other keys.
+- komux.onMessage(fn): messages you send with script_send.
+- komux.reply(json): a reply you read with script_wait. komux.exit(json?): end the script.
 - setTimeout, setInterval, clearTimeout, clearInterval, console.log (kept in a log).
 
-Top-level await works; import does not. A script that throws, hogs the CPU or uses over 64 MB is stopped. It lives until it exits, is stopped, or its tab closes. \`qmux script types\` prints full TypeScript declarations.`;
+Top-level await works; import does not. A script that throws, hogs the CPU or uses over 64 MB is stopped. It lives until it exits, is stopped, or its tab closes. \`komux script types\` prints full TypeScript declarations.`;
 
 export function createServer(store: AskStore = new AskStore()): McpServer {
-  const server = new McpServer({ name: "qmux", version: "0.1.0" });
+  const server = new McpServer({ name: "komux", version: "0.1.0" });
 
   server.registerTool(
     "ask",
@@ -43,7 +43,7 @@ export function createServer(store: AskStore = new AskStore()): McpServer {
       inputSchema: {
         form: formSpec,
         wait_seconds: z.number().min(0).max(600).default(defaultWaitSeconds).describe("How long to wait for an answer before returning pending"),
-        host: z.enum(hostNames).default("auto").describe("Where to show the form; auto detects qmux, zellij, or tmux"),
+        host: z.enum(hostNames).default("auto").describe("Where to show the form; auto detects komux, zellij, or tmux"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
@@ -70,7 +70,7 @@ export function createServer(store: AskStore = new AskStore()): McpServer {
   server.registerTool(
     "script_run",
     {
-      title: "Run a qmux script",
+      title: "Run a komux script",
       description: scriptDescription,
       inputSchema: {
         source: z.string().describe("The TypeScript program"),
@@ -93,7 +93,7 @@ export function createServer(store: AskStore = new AskStore()): McpServer {
     "script_send",
     {
       title: "Send a running script a message",
-      description: "Deliver a JSON message to a running script's qmux.onMessage handler.",
+      description: "Deliver a JSON message to a running script's komux.onMessage handler.",
       inputSchema: { id: z.string(), message: z.unknown() },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },

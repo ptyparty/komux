@@ -27,19 +27,19 @@ async function run(source: string, input: unknown = null, answers: unknown[] = [
 test("the guest sees no host authority", async () => {
   const { events, outcome } = await run(`
     const names = ["fetch", "Bun", "process", "require", "Deno", "WebAssembly", "XMLHttpRequest", "WebSocket", "std", "os", "__call", "__request"];
-    qmux.reply(names.filter((name) => typeof (globalThis as any)[name] !== "undefined"));
-    qmux.reply((function () {}).constructor("return typeof process + typeof Bun")());
-    try { await import("node:fs"); qmux.reply("imported"); } catch (e: any) { qmux.reply("import failed"); }
-    qmux.exit(null);
+    komux.reply(names.filter((name) => typeof (globalThis as any)[name] !== "undefined"));
+    komux.reply((function () {}).constructor("return typeof process + typeof Bun")());
+    try { await import("node:fs"); komux.reply("imported"); } catch (e: any) { komux.reply("import failed"); }
+    komux.exit(null);
   `);
   expect(events).toEqual([{ reply: [] }, { reply: "undefinedundefined" }, { reply: "import failed" }]);
   expect(outcome).toEqual({ status: "exited", value: null });
 });
 
-test("the qmux object can't be replaced or changed", async () => {
+test("the komux object can't be replaced or changed", async () => {
   const { outcome } = await run(`
-    (qmux as any).toast = () => {};
-    qmux.exit(Object.isFrozen(qmux));
+    (komux as any).toast = () => {};
+    komux.exit(Object.isFrozen(komux));
   `);
   expect(outcome).toEqual({ status: "exited", value: true });
 });
@@ -47,8 +47,8 @@ test("the qmux object can't be replaced or changed", async () => {
 test("a replaced JSON doesn't change what crosses the boundary", async () => {
   const { events } = await run(`
     (globalThis as any).JSON = { stringify: () => "hacked", parse: () => "hacked" };
-    qmux.reply({ ok: 1 });
-    qmux.exit(null);
+    komux.reply({ ok: 1 });
+    komux.exit(null);
   `);
   expect(events[0]).toEqual({ reply: { ok: 1 } });
 });
@@ -58,7 +58,7 @@ test("types are stripped and input arrives as JSON", async () => {
     `
     type Step = { name: string };
     const steps: Step[] = input.steps;
-    qmux.exit(steps.map((s: Step) => s.name.toUpperCase()));
+    komux.exit(steps.map((s: Step) => s.name.toUpperCase()));
   `,
     { steps: [{ name: "a" }, { name: "b" }] },
   );
@@ -73,9 +73,9 @@ test("a syntax error is reported", async () => {
 test("requests resolve an awaited promise, and failures reject it", async () => {
   const { events, outcome } = await run(
     `
-    const answer: any = await qmux.ask({ title: "Pick", elements: [] });
-    qmux.toast("picked " + answer.values.env);
-    try { await qmux.state(); } catch (e: any) { qmux.exit(e.message); }
+    const answer: any = await komux.ask({ title: "Pick", elements: [] });
+    komux.toast("picked " + answer.values.env);
+    try { await komux.state(); } catch (e: any) { komux.exit(e.message); }
   `,
     null,
     [{ status: "submitted", values: { env: "prod" } }, new Error("no state")],
@@ -86,7 +86,7 @@ test("requests resolve an awaited promise, and failures reject it", async () => 
 
 test("a host call that throws becomes a guest exception", async () => {
   const { host } = recorder();
-  const sandbox = await Sandbox.start(`try { qmux.render([]); } catch (e: any) { qmux.exit("caught " + e.message); }`, null, {
+  const sandbox = await Sandbox.start(`try { komux.render([]); } catch (e: any) { komux.exit("caught " + e.message); }`, null, {
     ...host,
     call: () => {
       throw new Error("bad render");
@@ -108,7 +108,7 @@ test("a busy loop is interrupted", async () => {
 });
 
 test("a busy loop in a timer callback is interrupted too", async () => {
-  const { events, outcome } = await run(`qmux.toast("before"); setTimeout(() => { while (true) {} }, 10);`);
+  const { events, outcome } = await run(`komux.toast("before"); setTimeout(() => { while (true) {} }, 10);`);
   expect(events).toEqual([{ toast: "before" }]);
   expect(JSON.stringify(outcome)).toContain("without yielding");
 });
@@ -128,7 +128,7 @@ test("intervals repeat until cleared", async () => {
     let ticks = 0;
     const id = setInterval(() => {
       ticks += 1;
-      if (ticks === 3) { clearInterval(id); setTimeout(() => qmux.exit(ticks), 60); }
+      if (ticks === 3) { clearInterval(id); setTimeout(() => komux.exit(ticks), 60); }
     }, 1);
   `);
   expect(outcome).toEqual({ status: "exited", value: 3 });
@@ -138,8 +138,8 @@ test("events and messages reach their handlers, and ones after exit are dropped"
   const { events, host } = recorder();
   const sandbox = await Sandbox.start(
     `
-    qmux.onMessage((m: any) => { qmux.reply(m.n * 2); if (m.n === 3) qmux.exit("bye"); });
-    qmux.onEvent((e: any) => qmux.reply(e));
+    komux.onMessage((m: any) => { komux.reply(m.n * 2); if (m.n === 3) komux.exit("bye"); });
+    komux.onEvent((e: any) => komux.reply(e));
   `,
     null,
     host,
@@ -153,7 +153,7 @@ test("events and messages reach their handlers, and ones after exit are dropped"
 
 test("stopping releases a script with pending timers and requests", async () => {
   const { host } = recorder();
-  const sandbox = await Sandbox.start(`setTimeout(() => {}, 10000); setInterval(() => {}, 1000); qmux.ask({ title: "x", elements: [] });`, null, { ...host, request: () => new Promise(() => {}) });
+  const sandbox = await Sandbox.start(`setTimeout(() => {}, 10000); setInterval(() => {}, 1000); komux.ask({ title: "x", elements: [] });`, null, { ...host, request: () => new Promise(() => {}) });
   sandbox.stop();
   expect(await sandbox.done).toEqual({ status: "stopped" });
 });

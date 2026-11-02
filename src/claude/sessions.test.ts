@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { age, describe as describeSession, historyMessages, pastSessions, pickerItems, projectDir } from "./sessions.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "qmux-sessions-"));
+const dir = mkdtempSync(join(tmpdir(), "komux-sessions-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const line = (entry: object) => `${JSON.stringify(entry)}\n`;
@@ -34,7 +34,7 @@ describe("Claude sessions", () => {
     expect(await pastSessions(dir, 1)).toHaveLength(1);
   });
 
-  test("the picker lists sessions open in qmux, then ones running elsewhere, then New, then the past", () => {
+  test("the picker lists sessions open in komux, then ones running elsewhere, then New, then the past", () => {
     const items = pickerItems({
       live: [
         { paneId: 4, sessionId: "a", tab: "merlot" },

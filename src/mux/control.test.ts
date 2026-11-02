@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ControlError, controlRequest, sendControl, serveControl, type ControlRequest } from "./control.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "qmux-control-"));
+const dir = mkdtempSync(join(tmpdir(), "komux-control-"));
 const path = join(dir, "mux.sock");
+
+afterAll(() => rmSync(dir, { recursive: true, force: true }));
 let stop: (() => void) | undefined;
 
 afterEach(() => {

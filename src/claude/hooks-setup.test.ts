@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { selfCommand, shellWords } from "../ask/hosts.ts";
-import { defaultHookCommand, hasQmuxHooks, installHooks, missingHooks, removeHooks, type Settings } from "./hooks-setup.ts";
+import { defaultHookCommand, hasKomuxHooks, installHooks, missingHooks, removeHooks, type Settings } from "./hooks-setup.ts";
 
-const ours = "/home/me/.bun/bin/bun /home/me/.bun/bin/qmux hook";
+const ours = "/home/me/.bun/bin/bun /home/me/.bun/bin/komux hook";
 const hook = (timeout: number) => [{ type: "command", command: ours, timeout }];
 
 const current: Settings = {
@@ -20,7 +20,7 @@ const current: Settings = {
   },
 };
 
-describe("qmux hooks in Claude settings", () => {
+describe("komux hooks in Claude settings", () => {
   test("every hook is missing from empty settings", () => {
     expect(missingHooks([{}])).toHaveLength(8);
   });
@@ -30,7 +30,7 @@ describe("qmux hooks in Claude settings", () => {
   });
 
   test("installing adds what is missing with the command already in use, and keeps everything else", () => {
-    const installed = installHooks(current, [], "/elsewhere/qmux hook");
+    const installed = installHooks(current, [], "/elsewhere/komux hook");
     expect(missingHooks([installed])).toEqual([]);
     expect(installed.model).toBe("opus");
     expect(installed.hooks!.PreToolUse).toEqual([
@@ -49,7 +49,7 @@ describe("qmux hooks in Claude settings", () => {
     expect(wake).toMatchObject({ async: true, asyncRewake: true, timeout: 86400 });
   });
 
-  test("qmux's hook leaves a shared group instead of widening it for the other hooks there", () => {
+  test("komux's hook leaves a shared group instead of widening it for the other hooks there", () => {
     const shared: Settings = { hooks: { PreToolUse: [{ matcher: "AskUserQuestion", hooks: [...hook(3600), { type: "command", command: "./audit.sh" }] }] } };
     expect(installHooks(shared, [], ours).hooks!.PreToolUse).toEqual([
       { matcher: "AskUserQuestion", hooks: [{ type: "command", command: "./audit.sh" }] },
@@ -74,18 +74,18 @@ describe("qmux hooks in Claude settings", () => {
     expect(missingHooks([quoted])).toEqual([]);
   });
 
-  test("the hook runs plain qmux when that is the qmux on PATH", () => {
+  test("the hook runs plain komux when that is the komux on PATH", () => {
     const self = selfCommand().at(-1)!;
-    expect(defaultHookCommand((name) => (name === "qmux" ? self : "/usr/bin/bun"))).toBe("qmux hook");
-    expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).toEndWith(" hook");
-    expect(defaultHookCommand((name) => (name === "qmux" ? "/elsewhere/qmux" : "/usr/bin/bun"))).not.toBe("qmux hook");
-    expect(defaultHookCommand(() => null)).not.toBe("qmux hook");
+    expect(defaultHookCommand((name) => (name === "komux" ? self : "/usr/bin/bun"))).toBe("komux hook");
+    expect(defaultHookCommand((name) => (name === "komux" ? "/elsewhere/komux" : "/usr/bin/bun"))).toEndWith(" hook");
+    expect(defaultHookCommand((name) => (name === "komux" ? "/elsewhere/komux" : "/usr/bin/bun"))).not.toBe("komux hook");
+    expect(defaultHookCommand(() => null)).not.toBe("komux hook");
   });
-  test("removing takes out only qmux's hooks", () => {
+  test("removing takes out only komux's hooks", () => {
     const installed = installHooks(current, [], ours);
-    expect(hasQmuxHooks(installed)).toBe(true);
+    expect(hasKomuxHooks(installed)).toBe(true);
     const removed = removeHooks(installed);
-    expect(hasQmuxHooks(removed)).toBe(false);
+    expect(hasKomuxHooks(removed)).toBe(false);
     expect(removed).toEqual({ model: "opus", hooks: { PreToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "prettier --write" }] }] } });
     expect(removeHooks({ hooks: { Stop: [{ hooks: hook(10) }] } })).toEqual({});
   });

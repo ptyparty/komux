@@ -14,29 +14,29 @@
 Results are from Linux on 12 threads, with a 200×60 outer terminal, Bun 1.4.3, OpenTUI 0.6.6, and zellij 0.44.3. The machine had a load average of about 7 from other work, so compare rows with each other rather than reading them as absolute numbers.
 
 ```bash
-bun spike/measure.ts --target qmux --busy 15 --fps 120
+bun spike/measure.ts --target komux --busy 15 --fps 120
 bun spike/measure.ts --target zellij --busy 15
-bun spike/measure.ts --target qmux --throughput --busy 0
+bun spike/measure.ts --target komux --throughput --busy 0
 ```
 
 ## Keystroke latency, 16 panes
 
 | Scenario | Multiplexer | p50 | p95 | p99 | CPU | RSS |
 |---|---|---|---|---|---|---|
-| Idle | qmux | 1.1 ms | 2.2 | 4.3 | 2% | 69 MB |
+| Idle | komux | 1.1 ms | 2.2 | 4.3 | 2% | 69 MB |
 | Idle | zellij | 11.7 ms | 12.8 | 13.8 | 8% | 96 MB |
-| 15 busy | qmux, 60 fps | 10–13 ms | 19–24 | 24–28 | 41% | 83 MB |
-| 15 busy | qmux, 120 fps | 8.6 ms | 15.0 | 18.4 | 42% | 83 MB |
+| 15 busy | komux, 60 fps | 10–13 ms | 19–24 | 24–28 | 41% | 83 MB |
+| 15 busy | komux, 120 fps | 8.6 ms | 15.0 | 18.4 | 42% | 83 MB |
 | 15 busy | zellij | 27–34 ms | 43–78 | 48–143 | 130–145% | 205 MB |
 
 ## Throughput: `cat` 38.6 MB in the focused pane
 
-| Other panes | qmux | zellij |
+| Other panes | komux | zellij |
 |---|---|---|
 | Idle | 4.1 s | 2.7 s |
 | 15 busy | 48 s | 35 s |
 
-qmux limits PTY reading to 6 ms of every 16 ms window, so typing stays fast. That limit is why it trails zellij here, and it can be tuned.
+komux limits PTY reading to 6 ms of every 16 ms window, so typing stays fast. That limit is why it trails zellij here, and it can be tuned.
 
 ## What it took to get there
 

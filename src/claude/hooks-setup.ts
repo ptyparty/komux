@@ -32,11 +32,11 @@ export function settingsPaths(configDir = claudeConfigDir()): { user: string; lo
 
 export function defaultHookCommand(which: (name: string) => string | null = Bun.which): string {
   const self = selfCommand();
-  return onPath(self, which) ? "qmux hook" : shellQuote([...self, "hook"]);
+  return onPath(self, which) ? "komux hook" : shellQuote([...self, "hook"]);
 }
 
 function onPath(self: string[], which: (name: string) => string | null): boolean {
-  const found = which("qmux");
+  const found = which("komux");
   if (!found || (self.length > 1 && !which("bun"))) return false;
   try {
     return realpathSync(found) === realpathSync(self.at(-1)!);
@@ -45,11 +45,11 @@ function onPath(self: string[], which: (name: string) => string | null): boolean
   }
 }
 
-function isQmuxHook(command: string | undefined, wake: boolean): boolean {
+function isKomuxHook(command: string | undefined, wake: boolean): boolean {
   if (!command) return false;
   const words = shellWords(command);
   const at = words.lastIndexOf("hook");
-  if (at < 1 || !/(^|\/)(qmux|cli\.ts)$/.test(words[at - 1]!)) return false;
+  if (at < 1 || !/(^|\/)(komux|cli\.ts)$/.test(words[at - 1]!)) return false;
   return wake ? words[at + 1] === "--wake" && words.length === at + 2 : words.length === at + 1;
 }
 
@@ -73,7 +73,7 @@ function covers(matcher: string | undefined, want: Wanted): boolean {
 function findHook(settings: Settings, want: Wanted): Found | undefined {
   let partial: Found | undefined;
   for (const group of settings.hooks?.[want.event] ?? []) {
-    const hook = group.hooks?.find((candidate) => candidate.type === "command" && isQmuxHook(candidate.command, Boolean(want.wake)));
+    const hook = group.hooks?.find((candidate) => candidate.type === "command" && isKomuxHook(candidate.command, Boolean(want.wake)));
     if (!hook) continue;
     if (covers(group.matcher, want)) return { group, hook };
     partial ??= { group, hook };
@@ -103,7 +103,7 @@ export function installHooks(target: Settings, others: Settings[], fallbackComma
   const existing = [target, ...others]
     .flatMap((settings) => Object.values(settings.hooks ?? {}).flat())
     .flatMap((group) => group.hooks ?? [])
-    .find((hook) => isQmuxHook(hook.command, false))?.command;
+    .find((hook) => isKomuxHook(hook.command, false))?.command;
   const command = existing ?? fallbackCommand;
   const hooks: Record<string, HookGroup[]> = structuredClone(target.hooks ?? {});
   for (const want of wanted) {
@@ -133,7 +133,7 @@ export function removeHooks(target: Settings): Settings {
   for (const [event, groups] of Object.entries(target.hooks ?? {})) {
     const kept = groups.flatMap((group) => {
       if (!group.hooks) return [group];
-      const left = group.hooks.filter((hook) => !isQmuxHook(hook.command, false) && !isQmuxHook(hook.command, true));
+      const left = group.hooks.filter((hook) => !isKomuxHook(hook.command, false) && !isKomuxHook(hook.command, true));
       return left.length > 0 ? [{ ...group, hooks: left }] : [];
     });
     if (kept.length > 0) hooks[event] = kept;
@@ -142,10 +142,10 @@ export function removeHooks(target: Settings): Settings {
   return Object.keys(hooks).length > 0 ? { ...rest, hooks } : rest;
 }
 
-export function hasQmuxHooks(target: Settings): boolean {
+export function hasKomuxHooks(target: Settings): boolean {
   return Object.values(target.hooks ?? {})
     .flat()
-    .some((group) => (group.hooks ?? []).some((hook) => isQmuxHook(hook.command, false) || isQmuxHook(hook.command, true)));
+    .some((group) => (group.hooks ?? []).some((hook) => isKomuxHook(hook.command, false) || isKomuxHook(hook.command, true)));
 }
 
 export async function readSettings(path: string): Promise<Settings> {
@@ -156,19 +156,19 @@ export async function readSettings(path: string): Promise<Settings> {
 export async function writeSettings(path: string, settings: Settings): Promise<string | undefined> {
   let backup: string | undefined;
   if (await Bun.file(path).exists()) {
-    backup = existsSync(`${path}.qmux-backup`) ? `${path}.qmux-backup-${Date.now()}` : `${path}.qmux-backup`;
+    backup = existsSync(`${path}.komux-backup`) ? `${path}.komux-backup-${Date.now()}` : `${path}.komux-backup`;
     await Bun.write(backup, Bun.file(path));
   }
-  const staging = `${path}.qmux-${process.pid}`;
+  const staging = `${path}.komux-${process.pid}`;
   await Bun.write(staging, `${JSON.stringify(settings, null, 2)}\n`);
   renameSync(staging, path);
   return backup;
 }
 
-export function qmuxStateDir(): string {
-  return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "qmux");
+export function komuxStateDir(): string {
+  return join(process.env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "komux");
 }
 
 export function declinedPath(): string {
-  return join(qmuxStateDir(), "hooks-declined");
+  return join(komuxStateDir(), "hooks-declined");
 }

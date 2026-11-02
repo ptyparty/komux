@@ -8,7 +8,7 @@ const forwardedEnv = ["TERM", "COLORTERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION
 type Connection = { decoder: FrameDecoder; writer: SocketWriter };
 
 export async function attachSession(name: string): Promise<never> {
-  if (process.env.QMUX_SESSION === name) {
+  if (process.env.KOMUX_SESSION === name) {
     throw new SessionError(`this terminal is already inside session ${name}; attaching it to itself would hide the session`);
   }
   const paths = sessionPaths(name);

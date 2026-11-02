@@ -392,7 +392,7 @@ export class MuxView {
 
   private renderTabs(): StyledText {
     const focusColor = modeFocusColor(this.workspace.mode);
-    const parts: Part[] = [bold(fg(theme.accent)(" qmux "))];
+    const parts: Part[] = [bold(fg(theme.accent)(" komux "))];
     this.workspace.tabs.forEach((tab, index) => {
       const active = index === this.workspace.active;
       const asking = this.workspace.popupsWaiting(tab) > 0 ? " ?" : "";

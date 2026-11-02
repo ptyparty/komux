@@ -55,7 +55,7 @@ const layoutEntry: z.ZodType<LayoutEntry, unknown> = z
     args: z
       .array(z.string().regex(/^\w[\w-]*$/, "args are names like \"pr\"").refine((arg) => arg !== "project", "project is always filled in; pick another name"))
       .optional()
-      .describe("Values qmux project --arg must give, filled in wherever {name} appears in commands and the tab name"),
+      .describe("Values komux project --arg must give, filled in wherever {name} appears in commands and the tab name"),
     name: z.string().min(1).optional().describe("Tab name; {project} and {arg} are filled in. Defaults to the project's name"),
     services: z.undefined({ error: "services are now jobs: rename `services:` to `jobs:`" }).optional(),
   })
@@ -81,13 +81,13 @@ export const configSchema = z
     tabs: z
       .record(z.string(), z.object({ layout: z.string(), cwd: z.string().optional().describe("Working directory; defaults to defaultCwd") }).strict())
       .default({})
-      .describe("Named tabs, opened from Ctrl+t o or qmux project like projects"),
+      .describe("Named tabs, opened from Ctrl+t o or komux project like projects"),
     tray: z.array(trayEntry).default(defaultTray).describe("Widgets on the right of the mode bar, such as { widget: \"clock\" }, { widget: \"system\" }, or { command: [...] }"),
     startup: z.array(z.string()).default([]).describe("Named tabs a new session opens instead of a plain tab"),
     projects: z
       .object({
         roots: z.array(z.string()).default(["~/work/*/*"]),
-        layout: z.string().optional().describe("Layout for tabs opened with Ctrl+t o or qmux project"),
+        layout: z.string().optional().describe("Layout for tabs opened with Ctrl+t o or komux project"),
         layoutFor: z.record(z.string(), z.string()).default({}).describe("Layouts for particular projects, by project name"),
       })
       .default({ roots: ["~/work/*/*"], layoutFor: {} }),
@@ -96,7 +96,7 @@ export const configSchema = z
   .superRefine((config, ctx) => {
     const checkLayout = (layout: string, path: (string | number)[]) => {
       if (!(layout in config.layouts)) ctx.addIssue({ code: "custom", path, message: `no layout named ${layout}` });
-      else if (config.layouts[layout]!.args?.length) ctx.addIssue({ code: "custom", path, message: `${layout} takes args, so only qmux project --layout can open it` });
+      else if (config.layouts[layout]!.args?.length) ctx.addIssue({ code: "custom", path, message: `${layout} takes args, so only komux project --layout can open it` });
     };
     if (config.projects.layout) checkLayout(config.projects.layout, ["projects", "layout"]);
     for (const [name, tab] of Object.entries(config.tabs)) checkLayout(tab.layout, ["tabs", name, "layout"]);
@@ -111,9 +111,9 @@ export type Config = z.infer<typeof configSchema>;
 export const defaultConfig: Config = configSchema.parse({});
 
 export function configPath(): string {
-  if (process.env.QMUX_CONFIG) return process.env.QMUX_CONFIG;
+  if (process.env.KOMUX_CONFIG) return process.env.KOMUX_CONFIG;
   const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
-  return join(base, "qmux", "config.ts");
+  return join(base, "komux", "config.ts");
 }
 
 export type LoadedConfig = { config: Config; error?: string };

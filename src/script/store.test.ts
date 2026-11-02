@@ -10,15 +10,15 @@ afterEach(() => {
 });
 
 function store(): ScriptStore {
-  const dir = mkdtempSync(join(tmpdir(), "qmux-scripts-"));
+  const dir = mkdtempSync(join(tmpdir(), "komux-scripts-"));
   dirs.push(dir);
   return new ScriptStore(join(dir, "scripts"));
 }
 
 test("replies are handed out once, and the outcome comes with them", async () => {
   const scripts = store();
-  const { id } = scripts.create("qmux.exit(1)", { a: 1 }, { name: "t", show: false, dock: false });
-  expect(scripts.program(id)).toEqual({ source: "qmux.exit(1)", input: { a: 1 } });
+  const { id } = scripts.create("komux.exit(1)", { a: 1 }, { name: "t", show: false, dock: false });
+  expect(scripts.program(id)).toEqual({ source: "komux.exit(1)", input: { a: 1 } });
   expect(scripts.status(id)).toBe("starting");
   scripts.markRunning(id, process.pid);
   scripts.reply(id, { n: 1 });

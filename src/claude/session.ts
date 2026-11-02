@@ -32,7 +32,7 @@ export class ClaudeSession {
       options: {
         ...parsed,
         cwd: options.cwd,
-        env: { ...options.env, QMUX_NATIVE_CLAUDE: "1" },
+        env: { ...options.env, KOMUX_NATIVE_CLAUDE: "1" },
         includePartialMessages: true,
         systemPrompt: { type: "preset", preset: "claude_code" },
         canUseTool: (tool, input, { signal, suggestions, toolUseID }) => this.answer(tool, input, suggestions, toolUseID, signal),
@@ -143,7 +143,7 @@ export class ClaudeSession {
     this.options.onChange();
     const result: PermissionResult = await this.options
       .decide({ tool_name: tool, input, permission_suggestions: suggestions as PermissionRequest["permission_suggestions"] }, signal)
-      .catch((error: Error) => ({ behavior: "deny", message: `qmux couldn't ask the user: ${error.message}` }));
+      .catch((error: Error) => ({ behavior: "deny", message: `komux couldn't ask the user: ${error.message}` }));
     this.asking.delete(ask);
     if (signal.aborted) {
       this.transcript.permissionAnswered(id, signal.reason === claudeInterrupted ? "dismissed" : "cancelled");

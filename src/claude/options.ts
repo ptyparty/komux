@@ -32,7 +32,7 @@ export function claudeOptions(args: string[]): Partial<Options> {
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     const [flag, inline] = arg.startsWith("--") && arg.includes("=") ? [arg.slice(0, arg.indexOf("=")), arg.slice(arg.indexOf("=") + 1)] : [arg, undefined];
-    if (!flag.startsWith("-")) throw new Error(`qmux claude passes flags to Claude, not "${arg}"`);
+    if (!flag.startsWith("-")) throw new Error(`komux claude passes flags to Claude, not "${arg}"`);
     const name = flag.replace(/^--?/, "");
     const next = args[index + 1];
     const optional = () => inline ?? (next !== undefined && !next.startsWith("-") ? args[++index]! : null);
@@ -84,11 +84,11 @@ export function claudeOptions(args: string[]): Partial<Options> {
         lists.plugins.push(...list());
         break;
       default: {
-        if (!flag.startsWith("--")) throw new Error(`qmux claude can't pass the short flag ${flag} to Claude; use its long form`);
-        if (name in extraArgs) throw new Error(`qmux claude can pass ${flag} to Claude only once`);
+        if (!flag.startsWith("--")) throw new Error(`komux claude can't pass the short flag ${flag} to Claude; use its long form`);
+        if (name in extraArgs) throw new Error(`komux claude can pass ${flag} to Claude only once`);
         if (listFlags.has(name)) {
           const values = list();
-          if (values.length > 1) throw new Error(`qmux claude can pass only one value to ${flag}`);
+          if (values.length > 1) throw new Error(`komux claude can pass only one value to ${flag}`);
           extraArgs[name] = values[0]!;
         } else extraArgs[name] = valueFlags.has(name) ? required() : optional();
       }

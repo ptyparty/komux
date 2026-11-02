@@ -17,14 +17,14 @@ function focusName(focusable: Focusable): string {
 describe("FormController", () => {
   test("submits defaults", () => {
     const form = controllerFor([
-      { type: "text", id: "name", label: "Name", default: "qmux" },
+      { type: "text", id: "name", label: "Name", default: "komux" },
       { type: "confirm", id: "ok", label: "OK?", default: true },
       { type: "number", id: "n", label: "N", min: 2, max: 5 },
       { type: "choice", id: "env", label: "Env", options: ["dev", "prod"], default: "prod" },
       { type: "choice", id: "tags", label: "Tags", options: ["a", "b"], multi: true },
     ]);
     form.dispatch({ type: "submit" });
-    expect(form.result).toEqual({ status: "submitted", values: { name: "qmux", ok: true, n: 2, env: "prod", tags: [] } });
+    expect(form.result).toEqual({ status: "submitted", values: { name: "komux", ok: true, n: 2, env: "prod", tags: [] } });
   });
 
   test("slides page with left and right, and keep one note per slide", () => {

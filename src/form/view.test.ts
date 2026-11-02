@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing";
 import { FormController, type FormResult } from "./controller.ts";
 import { type ImageOutput } from "./image.ts";
@@ -7,6 +10,9 @@ import { parseFormSpec } from "./schema.ts";
 import { runForm } from "./view.ts";
 
 let setup: TestRendererSetup | undefined;
+const pictures = mkdtempSync(join(tmpdir(), "komux-view-test-"));
+
+afterAll(() => rmSync(pictures, { recursive: true, force: true }));
 
 afterEach(async () => {
   await setup?.dispose();
@@ -173,7 +179,7 @@ describe("form view", () => {
   });
 
   test("uploads an image and fills its box with placeholders", async () => {
-    const path = `${process.env.TMPDIR ?? "/tmp"}/qmux-view-test-${process.pid}.png`;
+    const path = join(pictures, "image.png");
     await Bun.write(path, tinyPng(40, 20));
     const written: string[] = [];
     const { setup } = await open([{ type: "image", path, caption: "Tiny" }], { enabled: true, write: (commands) => written.push(...commands) });
@@ -184,7 +190,7 @@ describe("form view", () => {
   });
 
   test("shows one slide at a time and sends each image once", async () => {
-    const path = `${process.env.TMPDIR ?? "/tmp"}/qmux-slides-test-${process.pid}.png`;
+    const path = join(pictures, "slides.png");
     await Bun.write(path, tinyPng(40, 20));
     const written: string[] = [];
     const { setup, result } = await open(

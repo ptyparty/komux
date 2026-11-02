@@ -8,7 +8,7 @@ const { values } = parseArgs({
   options: {
     panes: { type: "string", default: "16" },
     columns: { type: "string", default: "4" },
-    "big-file": { type: "string", default: "/tmp/qmux-bench-big.txt" },
+    "big-file": { type: "string", default: "/tmp/komux-bench-big.txt" },
     fps: { type: "string", default: "60" },
     workloads: { type: "string" },
     "budget-ms": { type: "string", default: "6" },

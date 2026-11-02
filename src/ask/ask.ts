@@ -34,9 +34,9 @@ export async function ask(store: AskStore, spec: FormSpec, host: HostName, waitM
 }
 
 export function askOwner(env: Record<string, string | undefined>): AskOwner | undefined {
-  const paneId = Number(env.QMUX_PANE_ID);
-  if (!env.QMUX_SOCKET || !env.QMUX_PANE_ID || !Number.isInteger(paneId)) return undefined;
-  return { socket: env.QMUX_SOCKET, paneId, ...(env.QMUX_SERVER_ID && { server: env.QMUX_SERVER_ID }) };
+  const paneId = Number(env.KOMUX_PANE_ID);
+  if (!env.KOMUX_SOCKET || !env.KOMUX_PANE_ID || !Number.isInteger(paneId)) return undefined;
+  return { socket: env.KOMUX_SOCKET, paneId, ...(env.KOMUX_SERVER_ID && { server: env.KOMUX_SERVER_ID }) };
 }
 
 export async function reopen(store: AskStore, id: string, host: HostName): Promise<Launch> {

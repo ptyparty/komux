@@ -4,8 +4,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-CAST_DIR="${CAST_DIR:-/tmp/qmux-hero-cast}"
-OUT="${1:-docs/qmux}"
+CAST_DIR="${CAST_DIR:-/tmp/komux-hero-cast}"
+OUT="${1:-docs/komux}"
 
 mkdir -p "$CAST_DIR"
 VENV="$CAST_DIR/venv"

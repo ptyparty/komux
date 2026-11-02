@@ -9,7 +9,7 @@ function word(line: string, column: number): string | undefined {
 describe("wordAt", () => {
   test("selects the run of non-space characters under the cursor", () => {
     expect(word("hello world", 7)).toBe("world");
-    expect(word("cd ~/work/stories/qmux now", 8)).toBe("~/work/stories/qmux");
+    expect(word("cd ~/work/stories/komux now", 8)).toBe("~/work/stories/komux");
     expect(word("see https://example.com/a?b=c done", 10)).toBe("https://example.com/a?b=c");
   });
 

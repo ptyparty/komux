@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TabDirs } from "./tab-dirs.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "qmux-tab-dirs-"));
+const dir = mkdtempSync(join(tmpdir(), "komux-tab-dirs-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("TabDirs", () => {

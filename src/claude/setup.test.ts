@@ -7,39 +7,39 @@ import { setupItems } from "./setup.ts";
 let dir: string;
 let config: string;
 let root: string;
-const ours = () => "/home/me/.bun/bin/qmux hook";
+const ours = () => "/home/me/.bun/bin/komux hook";
 
 beforeEach(() => {
-  dir = realpathSync(mkdtempSync(join(tmpdir(), "qmux-setup-")));
+  dir = realpathSync(mkdtempSync(join(tmpdir(), "komux-setup-")));
   config = join(dir, "claude");
-  root = join(dir, "qmux");
-  mkdirSync(join(root, "skills", "qmux-ask"), { recursive: true });
-  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "qmux" }));
-  writeFileSync(join(root, "skills", "qmux-ask", "SKILL.md"), "skill");
+  root = join(dir, "komux");
+  mkdirSync(join(root, "skills", "komux-ask"), { recursive: true });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "komux" }));
+  writeFileSync(join(root, "skills", "komux-ask", "SKILL.md"), "skill");
   mkdirSync(join(root, "rules"), { recursive: true });
-  writeFileSync(join(root, "rules", "qmux-jobs.md"), "jobs");
+  writeFileSync(join(root, "rules", "komux-jobs.md"), "jobs");
   writeFileSync(join(root, "rules", "notes.txt"), "not a rule");
   mkdirSync(join(config, "rules"), { recursive: true });
-  writeFileSync(join(config, "rules", "qmux-jobs.md"), "mine");
+  writeFileSync(join(config, "rules", "komux-jobs.md"), "mine");
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-describe("qmux setup", () => {
+describe("komux setup", () => {
   test("lists hooks, skills and rules with their state, sets them up, and removes them", async () => {
     const before = await setupItems(config, root, ours);
     expect(before.map((item) => [item.id, item.state])).toEqual([
       ["hooks", "missing"],
-      ["skill:qmux-ask", "missing"],
-      ["rule:qmux-jobs", "different"],
+      ["skill:komux-ask", "missing"],
+      ["rule:komux-jobs", "different"],
     ]);
     for (const item of before) await item.apply();
     expect((await setupItems(config, root, ours)).map((item) => item.state)).toEqual(["installed", "installed", "installed"]);
-    expect(readFileSync(join(config, "skills", "qmux-ask", "SKILL.md"), "utf8")).toBe("skill");
-    expect(readFileSync(join(config, "qmux-backup", "rules", "qmux-jobs.md"), "utf8")).toBe("mine");
+    expect(readFileSync(join(config, "skills", "komux-ask", "SKILL.md"), "utf8")).toBe("skill");
+    expect(readFileSync(join(config, "komux-backup", "rules", "komux-jobs.md"), "utf8")).toBe("mine");
     for (const item of await setupItems(config, root, ours)) await item.remove();
-    expect(readFileSync(join(config, "rules", "qmux-jobs.md"), "utf8")).toBe("mine");
-    expect(existsSync(join(config, "skills", "qmux-ask"))).toBe(false);
+    expect(readFileSync(join(config, "rules", "komux-jobs.md"), "utf8")).toBe("mine");
+    expect(existsSync(join(config, "skills", "komux-ask"))).toBe(false);
     expect(JSON.parse(readFileSync(join(config, "settings.json"), "utf8"))).toEqual({});
   });
 
@@ -49,7 +49,7 @@ describe("qmux setup", () => {
     expect(items.map((item) => item.state)).toEqual(["different", "missing", "different"]);
     await expect(items[0]!.apply()).rejects.toThrow("can't read Claude's settings");
     await items[1]!.apply();
-    expect(readFileSync(join(config, "skills", "qmux-ask", "SKILL.md"), "utf8")).toBe("skill");
+    expect(readFileSync(join(config, "skills", "komux-ask", "SKILL.md"), "utf8")).toBe("skill");
     rmSync(join(config, "settings.json"));
     writeFileSync(join(config, "settings.local.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: ours() }] }] } }));
     const [hooks] = await setupItems(config, root, ours);

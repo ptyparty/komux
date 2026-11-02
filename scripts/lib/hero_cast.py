@@ -15,18 +15,18 @@ PROMPT = (
     "Ask me how to round before you change anything."
 )
 
-QMUX_CONFIG = '''export default {
+KOMUX_CONFIG = '''export default {
   defaultCwd: %(project)s,
   env: {
     QUOLL_DIR: %(notebooks)s,
-    QUOLL_COMMENT_COMMAND: "qmux claude compose --from-stdin --label",
+    QUOLL_COMMENT_COMMAND: "komux claude compose --from-stdin --label",
   },
-  untrackedCommands: ["claude", "remax", "hx", "qmux", "quoll"],
+  untrackedCommands: ["claude", "remax", "hx", "komux", "quoll"],
   tabs: { "checkout-service": { cwd: %(project)s, layout: "ide" } },
   startup: ["checkout-service"],
   layouts: {
     ide: {
-      jobs: [{ name: "claude", command: ["qmux", "claude", "--mode", "auto"], dock: true }],
+      jobs: [{ name: "claude", command: ["komux", "claude", "--mode", "auto"], dock: true }],
       row: [
         { command: ["quoll", "--focus"] },
         { command: ["remax"], focus: true },
@@ -51,7 +51,7 @@ def prepare(repo):
     os.makedirs(remax_config)
     with open(os.path.join(remax_config, 'config.toml'), 'w') as handle:
         handle.write('tray = 0\n')
-    hs.write_qmux_config(env, QMUX_CONFIG, project=project, notebooks=notebooks)
+    hs.write_komux_config(env, KOMUX_CONFIG, project=project, notebooks=notebooks)
     hs.claude_config(
         sandbox,
         project,
@@ -90,7 +90,7 @@ def main():
     out_base = sys.argv[1]
     repo = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
     project, env = prepare(repo)
-    hs.record(['qmux', 'attach', SESSION], COLS, ROWS, project, env, SESSION, tour, out_base)
+    hs.record(['komux', 'attach', SESSION], COLS, ROWS, project, env, SESSION, tour, out_base)
 
 
 if __name__ == '__main__':

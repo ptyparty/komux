@@ -60,21 +60,21 @@ export class ScriptCallError extends Error {}
 
 export function parseCall(name: string, args: unknown[]): ScriptCall {
   const parsed = scriptCall.safeParse({ name, args });
-  if (!parsed.success) throw new ScriptCallError(`qmux.${name}: ${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new ScriptCallError(`komux.${name}: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }
 
 export function parseRequest(name: string, args: unknown[]): ScriptRequest {
   const parsed = scriptRequest.safeParse({ name, args });
-  if (!parsed.success) throw new ScriptCallError(`qmux.${name}: ${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new ScriptCallError(`komux.${name}: ${z.prettifyError(parsed.error)}`);
   return parsed.data;
 }
 
 export function scriptForm(input: unknown): FormSpec {
   const parsed = formSpec.safeParse(input);
-  if (!parsed.success) throw new ScriptCallError(`qmux.ask: ${z.prettifyError(parsed.error)}`);
+  if (!parsed.success) throw new ScriptCallError(`komux.ask: ${z.prettifyError(parsed.error)}`);
   const pictures = parsed.data.elements.filter((element) => element.type === "image" || element.type === "slides");
-  if (pictures.length > 0) throw new ScriptCallError("qmux.ask: scripts can't show image or slides elements, since they read files");
+  if (pictures.length > 0) throw new ScriptCallError("komux.ask: scripts can't show image or slides elements, since they read files");
   return parsed.data;
 }
 

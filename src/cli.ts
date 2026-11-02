@@ -13,78 +13,78 @@ import type { ReplyChoice } from "./mux/peek.ts";
 import { ScriptLaunchError, UnknownScriptError } from "./script/store.ts";
 import { defaultSessionName, listSessions, quitSession, SessionError } from "./mux/session/sessions.ts";
 
-const usage = `qmux: a terminal multiplexer agents can drive
+const usage = `komux: a terminal multiplexer agents can drive
 
 Usage:
-  qmux [attach [NAME]]
+  komux [attach [NAME]]
       Attach to session NAME (default "main"), starting it if it is not running.
       Detach with Ctrl+o d; the session keeps running.
-  qmux ls
+  komux ls
       List running sessions.
-  qmux kill NAME
+  komux kill NAME
       End a session and every program running in it.
-  qmux project NAME|PATH|--repo OWNER/REPO [--layout NAME] [--arg KEY=VALUE]...
+  komux project NAME|PATH|--repo OWNER/REPO [--layout NAME] [--arg KEY=VALUE]...
       From inside a session, open a project in a new tab, or switch to its tab if it is open.
       --repo finds the repo's clone under the project roots. --layout picks a layout, and
       --arg fills in the args it declares.
-  qmux pane open [--right|--below|--tab|--popup] [--name NAME] [--no-focus] [--width PCT] [--height PCT] -- COMMAND...
+  komux pane open [--right|--below|--tab|--popup] [--name NAME] [--no-focus] [--width PCT] [--height PCT] -- COMMAND...
       From inside a session, open a pane running COMMAND beside this one, or over this tab with --popup.
       A popup closes when COMMAND succeeds; --width and --height size it. Prints the new pane's id.
-  qmux claude compose --from-stdin --label LABEL
+  komux claude compose --from-stdin --label LABEL
       From inside a pane, open the message box for this tab's Claude with stdin attached as context.
       The label names the context in the box; on send, the context goes ahead of the message.
-  qmux claude [--resume ID|--continue] [--mode MODE] [-- CLAUDE_ARGS...]
-      Run a Claude Code session in this pane with qmux drawing the conversation (experimental).
+  komux claude [--resume ID|--continue] [--mode MODE] [-- CLAUDE_ARGS...]
+      Run a Claude Code session in this pane with komux drawing the conversation (experimental).
       From anywhere else in the tab, Alt+c sends it a message.
       --mode starts it in default, acceptEdits, plan or auto mode; /mode or Shift+Tab changes it later.
-  qmux job run [--name NAME] [--wait] -- COMMAND...
+  komux job run [--name NAME] [--wait] -- COMMAND...
       From inside a session, run COMMAND out of sight as a job in this tab; a toast says when it is done.
       Prints the job's id. With --wait, print the job's output as it runs and exit with its exit code.
-  qmux script run FILE.ts|- [--input JSON] [--name NAME] [--show] [--dock] [--wait] [--timeout SECONDS]
-      From inside a pane, run a TypeScript program as a job in a sandbox that can only draw qmux panels,
+  komux script run FILE.ts|- [--input JSON] [--name NAME] [--show] [--dock] [--wait] [--timeout SECONDS]
+      From inside a pane, run a TypeScript program as a job in a sandbox that can only draw komux panels,
       ask questions, toast, and set dock and tray text. It can't run commands, touch files or reach the network.
       Prints {"id", ...}; with --wait, also waits for its first replies or its end.
-  qmux script send ID JSON
-      Deliver JSON to the script's qmux.onMessage handler.
-  qmux script wait ID [--timeout SECONDS]
+  komux script send ID JSON
+      Deliver JSON to the script's komux.onMessage handler.
+  komux script wait ID [--timeout SECONDS]
       Print the script's status and any replies not yet read, waiting for one if there are none.
-  qmux script stop ID
+  komux script stop ID
       End a running script.
-  qmux script ls
+  komux script ls
       List scripts and their status.
-  qmux script types
+  komux script types
       Print the TypeScript declarations of what a script can use.
-  qmux ask [spec.json|-] [--wait] [--timeout SECONDS] [--host auto|qmux|zellij|tmux|none]
+  komux ask [spec.json|-] [--wait] [--timeout SECONDS] [--host auto|komux|zellij|tmux|none]
       Open a form for the user and print {"id", "host", "message", "status", ...}.
       With --wait, block until the user answers (or the timeout passes).
-  qmux wait ID [--timeout SECONDS]
+  komux wait ID [--timeout SECONDS]
       Print the ask's result, waiting for it if necessary. Without --timeout, waits forever.
-  qmux open ID [--host ...]
+  komux open ID [--host ...]
       Show a pending ask's form, for example when no host was detected when it was asked.
-  qmux pending
+  komux pending
       List asks that have not been answered.
-  qmux form spec.json
+  komux form spec.json
       Show a form in this terminal and print the result.
-  qmux form --ask ID [--asks-dir DIR]
+  komux form --ask ID [--asks-dir DIR]
       Show a stored ask's form in this terminal and record the answer.
       Closing the form records a cancel.
-  qmux schema
+  komux schema
       Print the JSON Schema for form specs.
-  qmux mcp
+  komux mcp
       Run the MCP server on stdio.
-  qmux hook
-      Claude Code hook: reads the hook's JSON on stdin and reports the agent's state to qmux.
-      Permission requests become a popup in the agent's tab. Does nothing outside qmux.
-  qmux peek spec.json --pane ID [--list]
+  komux hook
+      Claude Code hook: reads the hook's JSON on stdin and reports the agent's state to komux.
+      Permission requests become a popup in the agent's tab. Does nothing outside komux.
+  komux peek spec.json --pane ID [--list]
       Show an agent's reply (what Alt p opens); a typed reply is sent to pane ID.
       With --list, the file lists the agent's replies to pick one from.
-  qmux setup [--yes|--pick|--remove]
-      List qmux's Claude Code hooks, skill and rules and whether each is set up in Claude's config.
+  komux setup [--yes|--pick|--remove]
+      List komux's Claude Code hooks, skill and rules and whether each is set up in Claude's config.
       --yes sets up what is missing, --pick chooses in a form, --remove takes them out again.
       Skills and rules are links into this checkout, so they follow it as it updates.
-  qmux hooks [--install]
-      List the Claude Code hooks qmux needs that are missing from your settings, or add them.
-  qmux hook --wake
+  komux hooks [--install]
+      List the Claude Code hooks komux needs that are missing from your settings, or add them.
+  komux hook --wake
       Claude Code Stop hook to run with asyncRewake: waits until a form this pane opened is answered
       or dismissed, then exits 2 with the answer so Claude wakes up and reads it.
 
@@ -180,7 +180,7 @@ async function formCommand(args: string[]): Promise<void> {
   }
   const [source] = positionals;
   if (source === undefined || source === "-") {
-    throw new UsageError("qmux form needs a spec file; stdin is reserved for the keyboard");
+    throw new UsageError("komux form needs a spec file; stdin is reserved for the keyboard");
   }
   print(await (await import("./form/show.ts")).showForm(await readSpec(source), async () => {}));
 }
@@ -227,7 +227,7 @@ async function hookCommand(): Promise<void> {
     const output = await runHook(await Bun.stdin.text(), process.env);
     if (output) console.log(output);
   } catch (error) {
-    console.error(`qmux hook: ${(error as Error).message}`);
+    console.error(`komux hook: ${(error as Error).message}`);
   }
   process.exit(0);
 }
@@ -235,7 +235,7 @@ async function hookCommand(): Promise<void> {
 async function peekCommand(args: string[]): Promise<void> {
   const { values, positionals } = parse(args, { pane: { type: "string" }, list: { type: "boolean" } });
   const [source] = positionals;
-  if (!source) throw new UsageError("qmux peek needs a spec file");
+  if (!source) throw new UsageError("komux peek needs a spec file");
   const { showForm } = await import("./form/show.ts");
   const { peekSpec, pickSpec } = await import("./mux/peek.ts");
   const list = values.list || (await holdsReplyList(source)) ? await readReplyList(source) : undefined;
@@ -255,7 +255,7 @@ async function peekCommand(args: string[]): Promise<void> {
     text = result.status === "submitted" && typeof result.values.reply === "string" ? result.values.reply.trim() : "";
   }
   const paneId = Number(values.pane);
-  const socket = process.env.QMUX_SOCKET;
+  const socket = process.env.KOMUX_SOCKET;
   if (!text || !socket || !Number.isInteger(paneId)) return;
   await sendControl(socket, { method: "agent.prompt", params: { paneId, text } }).catch(() => undefined);
 }
@@ -298,7 +298,7 @@ async function setupCommand(args: string[]): Promise<void> {
   if (values.pick) {
     const result = await (await import("./form/show.ts")).showForm(
       {
-        title: "qmux setup",
+        title: "komux setup",
         description: `Claude Code's config in ${claudeConfigDir()}`,
         elements: [
           {
@@ -320,9 +320,9 @@ async function setupCommand(args: string[]): Promise<void> {
     chosen = items.filter((item) => picked.has(item.id) && item.state !== "installed");
   }
   if (!values.yes && !values.pick) {
-    console.log(`Claude Code setup for qmux, in ${claudeConfigDir()}:\n`);
+    console.log(`Claude Code setup for komux, in ${claudeConfigDir()}:\n`);
     for (const item of items) console.log(line(item, item.detail));
-    if (needed.length > 0) console.log(`\nRun \`qmux setup --yes\` to set up the ${needed.length} not marked ✓, or \`qmux setup --pick\` to choose.`);
+    if (needed.length > 0) console.log(`\nRun \`komux setup --yes\` to set up the ${needed.length} not marked ✓, or \`komux setup --pick\` to choose.`);
     return;
   }
   if (chosen.length === 0) return console.log("Nothing to set up.");
@@ -343,14 +343,14 @@ async function hooksCommand(args: string[]): Promise<void> {
   const { user: path, local: localPath } = setup.settingsPaths();
   const [settings, local] = await Promise.all([setup.readSettings(path), setup.readSettings(localPath)]);
   const missing = setup.missingHooks([settings, local]);
-  if (missing.length === 0) return console.log(`qmux hooks are up to date in ${path}`);
+  if (missing.length === 0) return console.log(`komux hooks are up to date in ${path}`);
   if (!values.install) {
     console.log(`Missing or out of date in ${path}:`);
     for (const hook of missing) console.log(`  ${hook.label}: ${hook.why}`);
-    return console.log("Run `qmux hooks --install` to add them.");
+    return console.log("Run `komux hooks --install` to add them.");
   }
   const backup = await setup.writeSettings(path, setup.installHooks(settings, [local], setup.defaultHookCommand()));
-  console.log(`Installed ${missing.length} qmux hooks in ${path}${backup ? `; the old file is at ${backup}` : ""}`);
+  console.log(`Installed ${missing.length} komux hooks in ${path}${backup ? `; the old file is at ${backup}` : ""}`);
 }
 
 async function wakeCommand(): Promise<void> {
@@ -372,8 +372,8 @@ async function projectCommand(args: string[]): Promise<void> {
   if (!target && !values.repo) throw new UsageError("missing project name or path");
   if (values.repo && !/^[^/\s]+\/[^/\s]+$/.test(values.repo)) throw new UsageError(`--repo must look like OWNER/REPO, got ${values.repo}`);
   const layoutArgs = Object.fromEntries((values.arg ?? []).map(layoutArg));
-  const socket = process.env.QMUX_SOCKET;
-  if (!socket) throw new UsageError("qmux project works from inside a qmux session");
+  const socket = process.env.KOMUX_SOCKET;
+  if (!socket) throw new UsageError("komux project works from inside a komux session");
   const choice = { ...(values.layout ? { layout: values.layout } : {}), args: layoutArgs };
   const params = target ? { target, ...choice } : { repo: values.repo!, ...choice };
   const response = await sendControl(socket, { method: "project.open", params }).catch((error: Error) => {
@@ -384,9 +384,9 @@ async function projectCommand(args: string[]): Promise<void> {
 
 async function composeFromStdin(label: string | undefined): Promise<void> {
   if (!label) throw new UsageError("--from-stdin needs --label");
-  const socket = process.env.QMUX_SOCKET;
-  const paneId = Number(process.env.QMUX_PANE_ID);
-  if (!socket || !Number.isInteger(paneId)) throw new UsageError("qmux claude compose --from-stdin works from inside a qmux pane");
+  const socket = process.env.KOMUX_SOCKET;
+  const paneId = Number(process.env.KOMUX_PANE_ID);
+  if (!socket || !Number.isInteger(paneId)) throw new UsageError("komux claude compose --from-stdin works from inside a komux pane");
   const text = (await Bun.stdin.text()).trim();
   if (!text) throw new UsageError("nothing on stdin to attach");
   const response = await sendControl(socket, { method: "claude.compose", params: { paneId, context: { text, label } } }).catch((error: Error) => {
@@ -419,9 +419,9 @@ async function paneCommand(args: string[]): Promise<void> {
   const width = percent(values.width, "--width");
   const height = percent(values.height, "--height");
   if (positionals.length === 0) throw new UsageError("missing the command to run in the pane");
-  const socket = process.env.QMUX_SOCKET;
-  const near = Number(process.env.QMUX_PANE_ID);
-  if (!socket || !Number.isInteger(near)) throw new UsageError("qmux pane open works from inside a qmux pane");
+  const socket = process.env.KOMUX_SOCKET;
+  const near = Number(process.env.KOMUX_PANE_ID);
+  if (!socket || !Number.isInteger(near)) throw new UsageError("komux pane open works from inside a komux pane");
   const response = await sendControl(socket, {
     method: "pane.open",
     params: { command: positionals, near, placement: placements[0] ?? "right", name: values.name, focus: !values["no-focus"], width, height },
@@ -489,7 +489,7 @@ async function scriptCommand(args: string[]): Promise<void> {
     }
     case "send": {
       const [id, message] = rest;
-      if (!id || message === undefined) throw new UsageError("qmux script send takes an id and a JSON message");
+      if (!id || message === undefined) throw new UsageError("komux script send takes an id and a JSON message");
       new ScriptStore().send(id, jsonArg(message, "the message"));
       return;
     }
@@ -508,7 +508,7 @@ async function scriptCommand(args: string[]): Promise<void> {
     case "ls":
       return print(new ScriptStore().list().map(({ meta, status }) => ({ id: meta.id, name: meta.name, createdAt: meta.createdAt, status })));
     case "types":
-      process.stdout.write(await Bun.file(new URL("./script/qmux-script.d.ts", import.meta.url)).text());
+      process.stdout.write(await Bun.file(new URL("./script/komux-script.d.ts", import.meta.url)).text());
       return;
     case "host":
       if (!rest[0]) throw new UsageError("missing script id");
@@ -531,9 +531,9 @@ async function jobCommand(args: string[]): Promise<void> {
   if (subcommand !== "run") throw new UsageError(`unknown job command ${subcommand ?? ""}`.trim());
   const { values, positionals } = parse(rest, { name: { type: "string" }, wait: { type: "boolean" } });
   if (positionals.length === 0) throw new UsageError("missing the command to run as a job");
-  const socket = process.env.QMUX_SOCKET;
-  const near = Number(process.env.QMUX_PANE_ID);
-  if (!socket || !Number.isInteger(near)) throw new UsageError("qmux job run works from inside a qmux pane");
+  const socket = process.env.KOMUX_SOCKET;
+  const near = Number(process.env.KOMUX_PANE_ID);
+  if (!socket || !Number.isInteger(near)) throw new UsageError("komux job run works from inside a komux pane");
   const control = async (request: Parameters<typeof sendControl>[1]) => {
     const response = await sendControl(socket, request).catch((error: Error) => {
       throw new SessionError(error.message);
@@ -596,7 +596,7 @@ function percent(value: string | undefined, flag: string): number | undefined {
 async function listCommand(): Promise<void> {
   const sessions = await listSessions();
   if (sessions.length === 0) {
-    console.log("No running sessions. Start one with: qmux attach NAME");
+    console.log("No running sessions. Start one with: komux attach NAME");
     return;
   }
   for (const session of sessions) {

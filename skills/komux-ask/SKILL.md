@@ -1,15 +1,15 @@
 ---
-name: qmux-ask
-description: Asks the user questions through a form that pops up in their terminal (a qmux popup, a zellij floating pane, or a tmux popup) and returns the answers as JSON, via the qmux `ask`/`wait` MCP tools or the `qmux ask` CLI. Use when you need the user to make a decision, pick between options, confirm a risky action, or answer several questions at once instead of asking in chat, and when the user says "ask me", "give me a form", "popup", or "qmux". For a live panel you keep updating, or a wizard with computed steps, use `qmux-script` instead.
+name: komux-ask
+description: Asks the user questions through a form that pops up in their terminal (a komux popup, a zellij floating pane, or a tmux popup) and returns the answers as JSON, via the komux `ask`/`wait` MCP tools or the `komux ask` CLI. Use when you need the user to make a decision, pick between options, confirm a risky action, or answer several questions at once instead of asking in chat, and when the user says "ask me", "give me a form", "popup", or "komux". For a live panel you keep updating, or a wizard with computed steps, use `komux-script` instead.
 ---
 
-# Asking the user with qmux
+# Asking the user with komux
 
 A form beats a chat question when the answer is a choice among known options, when several answers are needed before you can continue, or when a yes/no gate guards something risky. For open-ended discussion, ask in chat instead.
 
 ## Calling it
 
-Prefer the MCP tools when the `qmux` server is connected:
+Prefer the MCP tools when the `komux` server is connected:
 
 1. `ask` with `{ "form": <spec>, "wait_seconds": 50 }`. It opens the form and waits up to `wait_seconds`.
 2. If the result's `status` is `pending`, call `wait` with `{ "id": <id> }` until it is not. The user may be away, so keep waiting rather than re-asking.
@@ -17,12 +17,12 @@ Prefer the MCP tools when the `qmux` server is connected:
 Without MCP, use the CLI. It prints the same JSON:
 
 ```bash
-qmux ask spec.json --wait --timeout 50
-qmux wait <id> --timeout 50
-qmux schema
+komux ask spec.json --wait --timeout 50
+komux wait <id> --timeout 50
+komux schema
 ```
 
-Run `qmux ask` from a shell inside the user's qmux, zellij, or tmux session. It picks the host from `$QMUX_SOCKET`, `$ZELLIJ`, or `$TMUX`, in that order. If none is set, the result's `message` holds a command the user can run to answer.
+Run `komux ask` from a shell inside the user's komux, zellij, or tmux session. It picks the host from `$KOMUX_SOCKET`, `$ZELLIJ`, or `$TMUX`, in that order. If none is set, the result's `message` holds a command the user can run to answer.
 
 ## Form spec
 
@@ -64,7 +64,7 @@ A choice gets an "Other…" free-text option unless `"other": false`. When the u
 
 - `{"status":"submitted","values":{...}}`: one entry per element that was visible at submit time. Hidden elements are left out, so check for a key before reading it.
 - `{"status":"cancelled"}`: the user pressed Esc or closed the pane. Treat this as "no". Do not reopen the same form; ask in chat what they want instead.
-- `{"status":"pending"}`: not answered yet. Call `wait` again. When the ask's host was `none`, tell the user the command from `message`, or `qmux open <id>`, so they can answer.
+- `{"status":"pending"}`: not answered yet. Call `wait` again. When the ask's host was `none`, tell the user the command from `message`, or `komux open <id>`, so they can answer.
 
 ## Writing good forms
 

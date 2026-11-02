@@ -43,12 +43,12 @@ describe("controlResult", () => {
 });
 
 describe("decidePermission", () => {
-  test("outside qmux nobody can answer, so it denies", async () => {
-    expect(await decidePermission(write, {})).toEqual({ behavior: "deny", message: "Nobody could answer: this session is not running inside qmux" });
+  test("outside komux nobody can answer, so it denies", async () => {
+    expect(await decidePermission(write, {})).toEqual({ behavior: "deny", message: "Nobody could answer: this session is not running inside komux" });
   });
 
   test("questions that already carry answers go ahead", async () => {
     const question: PermissionRequest = { tool_name: "AskUserQuestion", input: { questions: [], answers: { "Which?": "A" } } };
-    expect(await decidePermission(question, { QMUX_SOCKET: "/nowhere", QMUX_PANE_ID: "3" })).toEqual({ behavior: "allow", updatedInput: question.input });
+    expect(await decidePermission(question, { KOMUX_SOCKET: "/nowhere", KOMUX_PANE_ID: "3" })).toEqual({ behavior: "allow", updatedInput: question.input });
   });
 });

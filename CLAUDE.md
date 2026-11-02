@@ -13,9 +13,9 @@ Default to using Bun instead of Node.js.
 - `src/form/`: the form spec schema, the `when` expression language, the form state machine (`controller.ts`), key bindings, and the OpenTUI view.
 - `src/ask/`: the file-backed ask store and the hosts that open a form (zellij, tmux).
 - `src/mcp/`: the MCP server.
-- `src/cli.ts`: the `qmux` command.
-- `skills/qmux-ask/`: the agent skill.
-- `rules/`: Claude Code rules for sessions inside qmux, linked into `~/.claude/rules`.
+- `src/cli.ts`: the `komux` command.
+- `skills/komux-ask/`: the agent skill.
+- `rules/`: Claude Code rules for sessions inside komux, linked into `~/.claude/rules`.
 
 ## Testing
 

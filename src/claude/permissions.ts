@@ -15,7 +15,7 @@ const unanswered: PermissionResult = { behavior: "deny", message: "No answer fro
 export async function decidePermission(request: PermissionRequest, env: Record<string, string | undefined> = process.env, signal?: AbortSignal): Promise<PermissionResult> {
   const stopOnDismiss = { stopOnDismiss: true, signal };
   const owner = askOwner(env);
-  if (!owner) return { behavior: "deny", message: "Nobody could answer: this session is not running inside qmux" };
+  if (!owner) return { behavior: "deny", message: "Nobody could answer: this session is not running inside komux" };
   const tool_input = request.input;
   switch (request.tool_name) {
     case "ExitPlanMode":

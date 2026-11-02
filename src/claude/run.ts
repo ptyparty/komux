@@ -46,7 +46,7 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
     }
     if (inbox) choice = await wakeAndChoose(renderer, inbox);
     else {
-      if (process.env.QMUX_SOCKET) await offerSetup(renderer);
+      if (process.env.KOMUX_SOCKET) await offerSetup(renderer);
       if (options.pick) choice = await chooseSession(renderer);
     }
     if (choice?.kind === "focus" && !(await focusPane(choice.paneId))) choice = { kind: "resume", sessionId: choice.sessionId };
@@ -137,10 +137,10 @@ async function offerSetup(renderer: CliRenderer): Promise<void> {
   }
   if (items.length === 0) return;
   await showIfJob();
-  const answer = await pick(renderer, "qmux setup", `${items.length} missing or out of date in ${claudeConfigDir()}`, [
+  const answer = await pick(renderer, "komux setup", `${items.length} missing or out of date in ${claudeConfigDir()}`, [
     { label: "Set them up", detail: items.map((item) => item.label).join(" · "), value: "install" },
     { label: "Not now", detail: "ask again next time", value: "later" },
-    { label: "Don't ask again", detail: "`qmux setup` lists them, and `qmux setup --pick` chooses", value: "never" },
+    { label: "Don't ask again", detail: "`komux setup` lists them, and `komux setup --pick` chooses", value: "never" },
   ]);
   if (answer === "install") for (const item of items) await item.apply().catch(() => undefined);
   if (answer === "never") await declineItems(items.map((item) => item.id)).catch(() => undefined);
@@ -159,7 +159,7 @@ async function chooseSession(renderer: CliRenderer): Promise<Choice | undefined>
 }
 
 async function liveSessions(): Promise<LiveSession[]> {
-  const { QMUX_SOCKET: control, QMUX_PANE_ID: pane } = process.env;
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
   if (!control) return [];
   try {
     const response = await sendControl(control, { method: "claude.sessions" }, 1000);
@@ -178,7 +178,7 @@ export function latestActivity(entries: readonly Entry[]): string | undefined {
 }
 
 function activityReporter(intervalMs = 250): (entries: readonly Entry[]) => void {
-  const { QMUX_SOCKET: control, QMUX_PANE_ID: pane } = process.env;
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
   const paneId = Number(pane);
   let sent: string | undefined;
   let pending: string | undefined;
@@ -210,7 +210,7 @@ function showIfJob(): Promise<void> {
 }
 
 async function focusPane(paneId: number): Promise<boolean> {
-  const { QMUX_SOCKET: control, QMUX_PANE_ID: pane } = process.env;
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
   if (!control) return false;
   const own = Number(pane);
   const closing = Number.isInteger(own) && !startedFromShell() ? own : undefined;
@@ -235,7 +235,7 @@ function startedFromShell(): boolean {
 type Inbox = { stop: () => Promise<void>; awaken: () => Promise<void>; nextWake: () => Promise<void>; forgetWake: () => void };
 
 function runningAsJob(): boolean {
-  const { QMUX_JOB: job, QMUX_PANE_ID: pane, QMUX_SOCKET: control } = process.env;
+  const { KOMUX_JOB: job, KOMUX_PANE_ID: pane, KOMUX_SOCKET: control } = process.env;
   return Boolean(control) && job !== undefined && job === pane;
 }
 
@@ -278,7 +278,7 @@ function dormant(renderer: CliRenderer, inbox: Inbox): Promise<void> {
 }
 
 async function ownPaneControl(request: (paneId: number) => Parameters<typeof sendControl>[1]): Promise<void> {
-  const { QMUX_SOCKET: control, QMUX_PANE_ID: pane } = process.env;
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
   const paneId = Number(pane);
   if (!control || !Number.isInteger(paneId)) return;
   await sendControl(control, request(paneId), 1000).catch(() => undefined);
@@ -296,7 +296,7 @@ async function openInbox(
   onText: (text: string) => void,
   options: { dormant?: boolean; commands?: () => SlashCommand[]; mode?: () => string | undefined; cycleMode?: () => string | undefined; wokenAgain?: () => void } = {},
 ): Promise<Inbox | undefined> {
-  const { QMUX_SOCKET: control, QMUX_PANE_ID: pane, QMUX_TAB_DIR: dir } = process.env;
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane, KOMUX_TAB_DIR: dir } = process.env;
   const paneId = Number(pane);
   if (!control || !dir || !Number.isInteger(paneId)) return undefined;
   const path = join(dir, `claude-${paneId}.sock`);

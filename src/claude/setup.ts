@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
-import { declinedPath, defaultHookCommand, hasQmuxHooks, installHooks, missingHooks, qmuxStateDir, readSettings, removeHooks, settingsPaths, writeSettings, type Settings } from "./hooks-setup.ts";
+import { declinedPath, defaultHookCommand, hasKomuxHooks, installHooks, missingHooks, komuxStateDir, readSettings, removeHooks, settingsPaths, writeSettings, type Settings } from "./hooks-setup.ts";
 import { applyLink, backupPath, linkState, removeLink, type Link, type LinkState } from "./links.ts";
 import { claudeConfigDir } from "./sessions.ts";
 
@@ -35,7 +35,7 @@ function links(configDir: string, root: string): (Link & { id: string; label: st
     source: join(root, folder, file),
     target: join(configDir, folder, file),
     tail: join(folder, file),
-    owner: "qmux",
+    owner: "komux",
   }));
 }
 
@@ -44,7 +44,7 @@ function linkItem(link: Link & { id: string; label: string }): SetupItem {
   const detail = {
     installed: "linked",
     missing: "missing",
-    outdated: "links to another qmux checkout",
+    outdated: "links to another komux checkout",
     different: `something else is there; it would be kept as ${backupPath(link)}`,
   }[state];
   return {
@@ -82,7 +82,7 @@ async function hooksItem(configDir: string, hookCommand: () => string): Promise<
     };
   }
   const missing = missingHooks([settings, local]);
-  const state: SetupState = missing.length === 0 ? "installed" : hasQmuxHooks(settings) || hasQmuxHooks(local) ? "outdated" : "missing";
+  const state: SetupState = missing.length === 0 ? "installed" : hasKomuxHooks(settings) || hasKomuxHooks(local) ? "outdated" : "missing";
   return {
     id: "hooks",
     label: "hooks",
@@ -98,11 +98,11 @@ async function hooksItem(configDir: string, hookCommand: () => string): Promise<
         [paths.user, settings],
         [paths.local, local],
       ] as const) {
-        if (!hasQmuxHooks(from)) continue;
+        if (!hasKomuxHooks(from)) continue;
         await writeSettings(path, removeHooks(from));
         removed.push(basename(path));
       }
-      return removed.length > 0 ? `removed from ${removed.join(" and ")}, keeping the old files as .qmux-backup` : undefined;
+      return removed.length > 0 ? `removed from ${removed.join(" and ")}, keeping the old files as .komux-backup` : undefined;
     },
   };
 }
@@ -110,7 +110,7 @@ async function hooksItem(configDir: string, hookCommand: () => string): Promise<
 export const stateMarks: Record<SetupState, string> = { installed: "✓", missing: "✗", outdated: "↻", different: "!" };
 
 export function setupDeclinedPath(): string {
-  return join(qmuxStateDir(), "setup-declined");
+  return join(komuxStateDir(), "setup-declined");
 }
 
 export async function declinedItems(): Promise<Set<string>> {
