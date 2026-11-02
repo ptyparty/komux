@@ -74,20 +74,23 @@ A layout in `~/.config/komux/config.ts` can list `jobs`: commands that start out
 
 ```ts
 export default {
-  projects: { layout: "ide", layoutFor: { "dashboard": "dashboard" } },
+  projects: { layout: "ide", layoutFor: { dotfiles: "shell" } },
   layouts: {
-    "dashboard": {
-      jobs: [{ command: ["dashboard", "serve"], name: "server", dock: true }],
-      row: [{ command: ["dashboard", "pane", "stories"], focus: true }, { column: [{ command: ["dashboard", "pane", "reviews"] }, { command: ["dashboard", "pane", "mentions"] }] }],
+    ide: {
+      jobs: [{ command: ["komux", "claude", "--mode", "auto"], name: "claude", dock: true }],
+      row: [{ command: ["hx", "."], focus: true }, {}],
     },
+    shell: { row: [{}] },
   },
 };
 ```
 
-- **Named tabs:** `tabs: { "dashboard": { layout: "dashboard", cwd: "~/work/initech/dashboard" } }` defines a tab with its own layout and working directory. Named tabs appear first in the Ctrl+t o launcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
+Every project opened with `ide` gets an editor, a shell, and a [native Claude](#native-claude-experimental) docked below them. Claude waits there without starting until Alt c in the tab picks a conversation, so opening a project costs nothing until you talk to it.
+
+- **Named tabs:** `tabs: { home: { layout: "ide", cwd: "~/work" } }` defines a tab with its own layout and working directory. Named tabs appear first in the Ctrl+t o launcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
 - **Args:** a layout with `args: ["pr"]` is opened by `komux project --layout pr-review --arg pr=12`, which fills `{pr}` into its commands, job names, drawer, and tab `name`, along with `{project}`. `name: "{project} #{pr}"` gives each PR its own tab, so the same args switch back to it. Such a layout can't be a project's or named tab's default.
-- **Repos:** `komux project --repo initech/dashboard` opens the clone under `projects.roots` whose path ends in `initech/dashboard`.
-- **Startup:** `startup: ["dashboard"]` opens those named tabs when a session starts, instead of a plain tab.
+- **Repos:** `komux project --repo ptyparty/komux` opens the clone under `projects.roots` whose path ends in `ptyparty/komux`.
+- **Startup:** `startup: ["home"]` opens those named tabs when a session starts, instead of a plain tab.
 - **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab. A job can put its socket there for the tab's panes to find.
 - **Without jobs:** Alt+Enter in the Ctrl+t o launcher opens a project without starting its layout's jobs. Ctrl+s s starts them later.
 - **Earlier configs:** layouts used to take `services`; rename them to `jobs`.
