@@ -19,7 +19,7 @@ export function refuseAgentCommand(patterns: string[], command: string, backgrou
   for (const words of simpleCommands(command)) {
     const pattern = patterns.find((candidate) => runs(words[0]!, candidate));
     if (!pattern) continue;
-    const howTo = `In qmux, run \`${pattern}\` with the Bash tool's run_in_background: true and without --detach, so it runs as a job the user can watch. Read its output to tell when it is ready.`;
+    const howTo = `In komux, run \`${pattern}\` with the Bash tool's run_in_background: true and without --detach, so it runs as a job the user can watch. Read its output to tell when it is ready.`;
     if (!background) return `${pattern} must run in the background. ${howTo}`;
     if (words.slice(1).some((word) => word === "--detach" || word.startsWith("--detach="))) return `Drop --detach from ${pattern}. ${howTo}`;
     const already = running.find((job) => job.command !== undefined && simpleCommands(job.command.map(quote).join(" ")).some((job) => runs(job[0]!, pattern)));

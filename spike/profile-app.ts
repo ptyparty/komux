@@ -9,7 +9,7 @@ EmbeddedTerminalRenderable.prototype.write = function (data) {
   const t = performance.now(); original.call(this, data); stats.writeMs += performance.now() - t;
   stats.calls++; stats.bytes += typeof data === "string" ? data.length : data.length;
 };
-const bigFile = await ensureBigFile("/tmp/qmux-bench-big.txt");
+const bigFile = await ensureBigFile("/tmp/komux-bench-big.txt");
 const renderer = await createCliRenderer({ exitOnCtrlC: false, targetFps: 60, maxFps: 60, gatherStats: true });
 const scheduler = new ReadScheduler(6, 16);
 const panes = [echoPane, ...busyWorkloads(15, bigFile)].map((w) => new Pane(renderer, w.command, w.title, scheduler));

@@ -12,7 +12,7 @@ let store: AskStore;
 let client: Client;
 
 beforeEach(async () => {
-  root = mkdtempSync(join(tmpdir(), "qmux-mcp-"));
+  root = mkdtempSync(join(tmpdir(), "komux-mcp-"));
   store = new AskStore(root);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await createServer(store).connect(serverTransport);

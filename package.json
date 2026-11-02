@@ -1,5 +1,5 @@
 {
-  "name": "qmux",
+  "name": "komux",
   "type": "module",
   "private": true,
   "scripts": {
@@ -20,6 +20,6 @@
     "zod": "4.6.7"
   },
   "bin": {
-    "qmux": "src/cli.ts"
+    "komux": "src/cli.ts"
   }
 }

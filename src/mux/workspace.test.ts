@@ -1273,7 +1273,7 @@ describe("Workspace", () => {
     test("an agent running as a job badges its tab, owns its popups, and is found by Alt a and Alt c", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
-      const claude = workspace.runJob(2, ["qmux", "claude"], "claude")!;
+      const claude = workspace.runJob(2, ["komux", "claude"], "claude")!;
       expect(workspace.tabCommandState(workspace.tab)).toBe("running");
       workspace.markAgent(claude);
       expect(workspace.tabCommandState(workspace.tab)).toBeUndefined();
@@ -1329,7 +1329,7 @@ describe("Workspace", () => {
 
     test("an agent job opened by Alt a hides once you reply and the agent gets back to work", () => {
       const { workspace } = ide({ now: 0 });
-      const claude = workspace.runJob(2, ["qmux", "claude"], "claude")!;
+      const claude = workspace.runJob(2, ["komux", "claude"], "claude")!;
       workspace.setAgentState(claude, "done");
       press(workspace, "alt+a");
       expect(workspace.popup).toMatchObject({ id: claude, kind: "job" });
@@ -1343,7 +1343,7 @@ describe("Workspace", () => {
 
     test("a job stops counting as an agent when its Claude leaves or it runs again", () => {
       const { workspace } = ide({ now: 0 });
-      const job = workspace.runJob(2, ["qmux", "claude"], "claude")!;
+      const job = workspace.runJob(2, ["komux", "claude"], "claude")!;
       workspace.markAgent(job);
       workspace.markAgent(job, false);
       expect(workspace.jobStatus(job)?.agent).toBe(false);
@@ -1355,7 +1355,7 @@ describe("Workspace", () => {
 
     test("a dormant Claude job forgets that it was dormant when it closes", () => {
       const { workspace } = ide({ now: 0 });
-      const claude = workspace.runJob(2, ["qmux", "claude"], "claude")!;
+      const claude = workspace.runJob(2, ["komux", "claude"], "claude")!;
       workspace.dormant.add(claude);
       workspace.closeJob(claude);
       expect(workspace.dormant.has(claude)).toBe(false);
@@ -1671,7 +1671,7 @@ describe("Workspace", () => {
     expect(workspace.hiddenAsks()).toEqual([]);
   });
 
-  test("Alt keys reach qmux over every kind of popup", () => {
+  test("Alt keys reach komux over every kind of popup", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
     const agent = workspace.focused;
@@ -1731,7 +1731,7 @@ describe("scripts", () => {
   test("a script's dock text, tray text and toast belong to its job", () => {
     const clock = { now: 0 };
     const { workspace } = ide(clock);
-    const id = workspace.runJob(2, ["qmux", "script", "host", "x"], "deploy")!;
+    const id = workspace.runJob(2, ["komux", "script", "host", "x"], "deploy")!;
     expect(workspace.setJobDock(id, "3 of 5 done")).toBe(true);
     expect(workspace.tabJobs()[0]).toMatchObject({ dock: true });
     expect(workspace.jobTexts.get(id)).toBe("3 of 5 done");
@@ -1751,7 +1751,7 @@ describe("scripts", () => {
 
   test("a script sees names and states in its own tab", () => {
     const { workspace } = ide({ now: 0 });
-    const id = workspace.runJob(2, ["qmux", "script", "host", "x"], "deploy")!;
+    const id = workspace.runJob(2, ["komux", "script", "host", "x"], "deploy")!;
     workspace.setAgentState(2, "working");
     const state = workspace.scriptState(id)!;
     expect(state.tabs.filter((tab) => tab.current)).toEqual([{ name: workspace.tab.name, current: true, attention: "working" }]);

@@ -13,7 +13,7 @@ type PanelEvent = { type: "select"; id: string; value: string } | { type: "key";
 
 type AskResult = { status: "submitted"; values: Record<string, Json> } | { status: "cancelled" };
 
-type QmuxState = {
+type KomuxState = {
   shown: boolean;
   tabs: { name: string; current: boolean; attention?: "working" | "waiting" | "done" | "failed" }[];
   panes: { name?: string; agent?: "working" | "waiting" | "done" | "failed" }[];
@@ -22,7 +22,7 @@ type QmuxState = {
 
 declare const input: any;
 
-declare const qmux: {
+declare const komux: {
   render(elements: PanelElement[]): void;
   show(): void;
   hide(): void;
@@ -32,7 +32,7 @@ declare const qmux: {
   reply(value: Json): void;
   exit(value?: Json): void;
   ask(form: { title: string; description?: string; elements: object[]; submitLabel?: string }): Promise<AskResult>;
-  state(): Promise<QmuxState>;
+  state(): Promise<KomuxState>;
   onEvent(handler: (event: PanelEvent) => void): void;
   onMessage(handler: (message: any) => void): void;
 };

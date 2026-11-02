@@ -90,7 +90,7 @@ export function serveControl(path: string, handler: ControlHandler): { stop: () 
 export async function sendControl(path: string, request: ControlRequest, timeoutMs = 3000): Promise<ControlResponse> {
   return new Promise((resolve, reject) => {
     let received = "";
-    const timer = setTimeout(() => reject(new ControlError(`qmux did not answer on ${path}`)), timeoutMs);
+    const timer = setTimeout(() => reject(new ControlError(`komux did not answer on ${path}`)), timeoutMs);
     Bun.connect({
       unix: path,
       socket: {
@@ -107,12 +107,12 @@ export async function sendControl(path: string, request: ControlRequest, timeout
         },
         error(_socket, error) {
           clearTimeout(timer);
-          reject(new ControlError(`could not reach qmux on ${path}: ${error.message}`));
+          reject(new ControlError(`could not reach komux on ${path}: ${error.message}`));
         },
       },
     }).catch((error: Error) => {
       clearTimeout(timer);
-      reject(new ControlError(`could not reach qmux on ${path}: ${error.message}`));
+      reject(new ControlError(`could not reach komux on ${path}: ${error.message}`));
     });
   });
 }

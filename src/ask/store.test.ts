@@ -12,7 +12,7 @@ let root: string;
 let store: AskStore;
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "qmux-store-"));
+  root = mkdtempSync(join(tmpdir(), "komux-store-"));
   store = new AskStore(root);
 });
 
@@ -42,13 +42,13 @@ describe("AskStore", () => {
   });
 
   test("results the asking pane has not seen are handed over once", async () => {
-    const owner = { socket: "/run/qmux.sock", paneId: 3 };
-    const answered = await store.create(spec, "qmux", owner);
+    const owner = { socket: "/run/komux.sock", paneId: 3 };
+    const answered = await store.create(spec, "komux", owner);
     await Bun.sleep(2);
-    const dismissed = await store.create(spec, "qmux", owner);
-    const waitedOn = await store.create(spec, "qmux", owner);
-    const open = await store.create(spec, "qmux", owner);
-    const elsewhere = await store.create(spec, "qmux", { socket: owner.socket, paneId: 4 });
+    const dismissed = await store.create(spec, "komux", owner);
+    const waitedOn = await store.create(spec, "komux", owner);
+    const open = await store.create(spec, "komux", owner);
+    const elsewhere = await store.create(spec, "komux", { socket: owner.socket, paneId: 4 });
     for (const meta of [answered, waitedOn, elsewhere]) await store.complete(meta.id, { status: "submitted", values: { ok: true } });
     await store.complete(dismissed.id, { status: "cancelled" });
     await store.wait(waitedOn.id, 0);
@@ -62,15 +62,15 @@ describe("AskStore", () => {
   });
 
   test("results from an earlier run of the session stay with it", async () => {
-    const before = await store.create(spec, "qmux", { socket: "/run/qmux.sock", paneId: 3, server: "first" });
+    const before = await store.create(spec, "komux", { socket: "/run/komux.sock", paneId: 3, server: "first" });
     await store.complete(before.id, { status: "submitted", values: {} });
-    expect(await store.claimUnseen({ socket: "/run/qmux.sock", paneId: 3, server: "second" })).toEqual([]);
+    expect(await store.claimUnseen({ socket: "/run/komux.sock", paneId: 3, server: "second" })).toEqual([]);
   });
 
   test("skips asks it cannot read", async () => {
-    const owner = { socket: "/run/qmux.sock", paneId: 3 };
-    const broken = await store.create(spec, "qmux", owner);
-    const fine = await store.create(spec, "qmux", owner);
+    const owner = { socket: "/run/komux.sock", paneId: 3 };
+    const broken = await store.create(spec, "komux", owner);
+    const fine = await store.create(spec, "komux", owner);
     await Bun.write(join(root, broken.id, "meta.json"), "{");
     await store.complete(fine.id, { status: "cancelled" });
     expect((await store.claimUnseen(owner)).map(({ meta }) => meta.id)).toEqual([fine.id]);
@@ -85,7 +85,7 @@ describe("AskStore", () => {
   });
 
   test("settled stops polling once its signal is aborted, and leaves the result unseen", async () => {
-    const owner = { socket: "/run/qmux.sock", paneId: 3 };
+    const owner = { socket: "/run/komux.sock", paneId: 3 };
     const { id } = await store.create(spec, "none", owner);
     const stop = new AbortController();
     const settled = store.settled(id, { pollMs: 10, signal: stop.signal });

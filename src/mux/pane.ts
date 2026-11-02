@@ -33,7 +33,7 @@ export type PaneOptions = {
 };
 
 const resetTerminal = "\x1bc";
-const fishIntegration = new URL("../shell/qmux.fish", import.meta.url).pathname;
+const fishIntegration = new URL("../shell/komux.fish", import.meta.url).pathname;
 const commandMark = /\x1b\]133;([CD])(?:;([^\x07\x1b]*))?(?:\x07|\x1b\\)/g;
 const markTailLength = 1024;
 const clipboardWrite = /\x1b\]52;[^;\x07\x1b]*;([A-Za-z0-9+/=]*)(?:\x07|\x1b\\)/g;
@@ -308,7 +308,7 @@ function shellCommand(): string[] {
 }
 
 function paneEnvironment(id: PaneId): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor", QMUX: "1", QMUX_PANE_ID: String(id) };
+  const env: Record<string, string | undefined> = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor", KOMUX: "1", KOMUX_PANE_ID: String(id) };
   for (const key of Object.keys(env)) if (key.startsWith("ZELLIJ") || key === "TMUX" || key === "TMUX_PANE") delete env[key];
   return env;
 }

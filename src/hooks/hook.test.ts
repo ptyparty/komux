@@ -6,7 +6,7 @@ import { AskStore } from "../ask/store.ts";
 import { serveControl, type ControlRequest } from "../mux/control.ts";
 import { backgroundAsJob, sessionForEvent, waitForAnswers, permissionDecision, permissionForm, planDecision, planForm, questionAnswers, questionForm, runHook, stateForEvent, type ClaudeQuestion, type PermissionInput } from "./hook.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "qmux-hook-"));
+const dir = mkdtempSync(join(tmpdir(), "komux-hook-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const bash: PermissionInput = {
@@ -21,7 +21,7 @@ function restore(key: string, value: string | undefined): void {
   else process.env[key] = value;
 }
 
-describe("qmux hook", () => {
+describe("komux hook", () => {
   test("events map to agent states", () => {
     expect(stateForEvent({ hook_event_name: "UserPromptSubmit" })).toEqual({ state: "working" });
     expect(stateForEvent({ hook_event_name: "Stop" })).toEqual({ state: "done" });
@@ -43,11 +43,11 @@ describe("qmux hook", () => {
 
   test("a reply's last line can ask for a brief toast or none", () => {
     const stop = (message: string) => stateForEvent({ hook_event_name: "Stop", last_assistant_message: message });
-    expect(stop("Done.\n\n**QMUX: NO TOAST**\n")).toEqual({ state: "done", reply: "Done.\n\n**QMUX: NO TOAST**\n", toast: "none" });
-    expect(stop("Build passed.\nqmux: brief toast")).toMatchObject({ toast: "brief" });
+    expect(stop("Done.\n\n**KOMUX: NO TOAST**\n")).toEqual({ state: "done", reply: "Done.\n\n**KOMUX: NO TOAST**\n", toast: "none" });
+    expect(stop("Build passed.\nkomux: brief toast")).toMatchObject({ toast: "brief" });
     expect(stop("Shall I start?")).toEqual({ state: "done", reply: "Shall I start?" });
-    expect(stop("QMUX: NO TOAST\nbut then more")).not.toHaveProperty("toast");
-    expect(stop(`${"x".repeat(9000)}\nQMUX: BRIEF TOAST`)).toMatchObject({ toast: "brief", reply: "x".repeat(8000) });
+    expect(stop("KOMUX: NO TOAST\nbut then more")).not.toHaveProperty("toast");
+    expect(stop(`${"x".repeat(9000)}\nKOMUX: BRIEF TOAST`)).toMatchObject({ toast: "brief", reply: "x".repeat(8000) });
   });
 
   test("session starts, prompts and ends report which session the pane holds", () => {
@@ -72,7 +72,7 @@ describe("qmux hook", () => {
     expect(permissionDecision(bash, { decision: "allow" })).toEqual(wrap({ behavior: "allow" }));
     expect(permissionDecision(bash, { decision: "always" })).toEqual(wrap({ behavior: "allow", updatedPermissions: [bash.permission_suggestions![0]] }));
     expect(permissionDecision(bash, { decision: "deny", reason: " too risky " })).toEqual(wrap({ behavior: "deny", message: "too risky" }));
-    expect(permissionDecision(bash, { decision: "deny" })).toEqual(wrap({ behavior: "deny", message: "The user denied this in qmux" }));
+    expect(permissionDecision(bash, { decision: "deny" })).toEqual(wrap({ behavior: "deny", message: "The user denied this in komux" }));
   });
 
   test("Claude's questions become a form and its answers come back keyed by question", () => {
@@ -108,30 +108,30 @@ describe("qmux hook", () => {
     const proc = join(dir, "proc");
     mkdirSync(join(proc, "42"), { recursive: true });
     writeFileSync(join(proc, "42", "cmdline"), "claude\0attach\0e3002ad1\0");
-    writeFileSync(join(proc, "42", "environ"), `QMUX_SOCKET=${socket}\0QMUX_PANE_ID=7\0`);
+    writeFileSync(join(proc, "42", "environ"), `KOMUX_SOCKET=${socket}\0KOMUX_PANE_ID=7\0`);
     const requests: ControlRequest[] = [];
     const server = serveControl(socket, (request) => {
       requests.push(request);
       return { ok: true };
     });
-    const previousSocket = process.env.QMUX_SOCKET;
-    const previousPane = process.env.QMUX_PANE_ID;
+    const previousSocket = process.env.KOMUX_SOCKET;
+    const previousPane = process.env.KOMUX_PANE_ID;
     try {
       await runHook(JSON.stringify({ hook_event_name: "Stop", session_id: "e3002ad1-66a9-4a1c" }), {}, proc);
     } finally {
       server.stop();
-      restore("QMUX_SOCKET", previousSocket);
-      restore("QMUX_PANE_ID", previousPane);
+      restore("KOMUX_SOCKET", previousSocket);
+      restore("KOMUX_PANE_ID", previousPane);
     }
     expect(requests).toEqual([{ method: "agent.state", params: { paneId: 7, state: "done" } }]);
   });
 
   test("the wake hook waits for the pane's open form and returns its answer once", async () => {
-    const env = { QMUX_SOCKET: join(dir, "wake.sock"), QMUX_PANE_ID: "5" };
+    const env = { KOMUX_SOCKET: join(dir, "wake.sock"), KOMUX_PANE_ID: "5" };
     const store = new AskStore(join(dir, "wake-asks"));
     expect(await waitForAnswers(env, {}, store, 5)).toBeUndefined();
-    const ask = await store.create({ title: "Deploy?", elements: [] }, "qmux", { socket: env.QMUX_SOCKET, paneId: 5 });
-    await store.create({ title: "Elsewhere", elements: [] }, "qmux", { socket: env.QMUX_SOCKET, paneId: 6 });
+    const ask = await store.create({ title: "Deploy?", elements: [] }, "komux", { socket: env.KOMUX_SOCKET, paneId: 5 });
+    await store.create({ title: "Elsewhere", elements: [] }, "komux", { socket: env.KOMUX_SOCKET, paneId: 6 });
     const woken = waitForAnswers(env, {}, store, 5);
     await Bun.sleep(20);
     await store.complete(ask.id, { status: "submitted", values: { go: true } });
@@ -141,14 +141,14 @@ describe("qmux hook", () => {
   });
 
   test("a prompt tells the agent about forms closed while it was not waiting", async () => {
-    const env = { QMUX_SOCKET: join(dir, "missing.sock"), QMUX_PANE_ID: "9", QMUX_STATE_DIR: join(dir, "notice-state") };
-    const previous = process.env.QMUX_STATE_DIR;
-    process.env.QMUX_STATE_DIR = env.QMUX_STATE_DIR;
+    const env = { KOMUX_SOCKET: join(dir, "missing.sock"), KOMUX_PANE_ID: "9", KOMUX_STATE_DIR: join(dir, "notice-state") };
+    const previous = process.env.KOMUX_STATE_DIR;
+    process.env.KOMUX_STATE_DIR = env.KOMUX_STATE_DIR;
     try {
       const store = new AskStore();
-      const owner = { socket: env.QMUX_SOCKET, paneId: 9 };
-      const dismissed = await store.create({ title: "Which branch?", elements: [] }, "qmux", owner);
-      const answered = await store.create({ title: "Ship it?", elements: [] }, "qmux", owner);
+      const owner = { socket: env.KOMUX_SOCKET, paneId: 9 };
+      const dismissed = await store.create({ title: "Which branch?", elements: [] }, "komux", owner);
+      const answered = await store.create({ title: "Ship it?", elements: [] }, "komux", owner);
       await store.complete(dismissed.id, { status: "cancelled" });
       await store.complete(answered.id, { status: "submitted", values: { ship: true } });
       const prompt = JSON.stringify({ hook_event_name: "UserPromptSubmit" });
@@ -157,11 +157,11 @@ describe("qmux hook", () => {
       expect(context).toContain(`"Ship it?" (${answered.id}) was answered: {"ship":true}`);
       expect(await runHook(prompt, env)).toBeUndefined();
     } finally {
-      restore("QMUX_STATE_DIR", previous);
+      restore("KOMUX_STATE_DIR", previous);
     }
   });
 
-  test("does nothing outside qmux", async () => {
+  test("does nothing outside komux", async () => {
     expect(await runHook(JSON.stringify({ hook_event_name: "Stop" }), {})).toBeUndefined();
   });
 
@@ -180,10 +180,10 @@ describe("qmux hook", () => {
       }
       return { ok: true };
     });
-    const env = { QMUX_SOCKET: socket, QMUX_PANE_ID: "7", QMUX_STATE_DIR: join(dir, "state") };
-    const previous = process.env.QMUX_STATE_DIR;
-    const previousSocket = process.env.QMUX_SOCKET;
-    const previousPane = process.env.QMUX_PANE_ID;
+    const env = { KOMUX_SOCKET: socket, KOMUX_PANE_ID: "7", KOMUX_STATE_DIR: join(dir, "state") };
+    const previous = process.env.KOMUX_STATE_DIR;
+    const previousSocket = process.env.KOMUX_SOCKET;
+    const previousPane = process.env.KOMUX_PANE_ID;
     Object.assign(process.env, env);
     try {
       expect(await runHook(JSON.stringify({ hook_event_name: "UserPromptSubmit" }), env)).toBeUndefined();
@@ -191,9 +191,9 @@ describe("qmux hook", () => {
       expect(JSON.parse(output!)).toEqual({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "deny", message: "not now" } } });
     } finally {
       server.stop();
-      restore("QMUX_STATE_DIR", previous);
-      restore("QMUX_SOCKET", previousSocket);
-      restore("QMUX_PANE_ID", previousPane);
+      restore("KOMUX_STATE_DIR", previous);
+      restore("KOMUX_SOCKET", previousSocket);
+      restore("KOMUX_PANE_ID", previousPane);
     }
     expect(requests.map((request) => request.method)).toEqual(["agent.state", "agent.state", "popup.open", "agent.state"]);
     expect(requests[0]).toEqual({ method: "agent.state", params: { paneId: 7, state: "working" } });
@@ -201,29 +201,29 @@ describe("qmux hook", () => {
     expect(owners).toEqual([undefined]);
   });
 
-  test("native qmux Claude sessions answer their own permission requests and questions", async () => {
-    const env = { QMUX_SOCKET: "/nowhere", QMUX_PANE_ID: "7", QMUX_NATIVE_CLAUDE: "1" };
+  test("native komux Claude sessions answer their own permission requests and questions", async () => {
+    const env = { KOMUX_SOCKET: "/nowhere", KOMUX_PANE_ID: "7", KOMUX_NATIVE_CLAUDE: "1" };
     const request = { hook_event_name: "PermissionRequest", tool_name: "Write", tool_input: { file_path: "/a" } };
     const question = { hook_event_name: "PreToolUse", tool_name: "AskUserQuestion", tool_input: { questions: [{ question: "Tea?", options: [{ label: "Yes" }] }] } };
     expect(await runHook(JSON.stringify(request), env)).toBeUndefined();
     expect(await runHook(JSON.stringify(question), env)).toBeUndefined();
   });
 
-  test("Claude's background commands run as qmux jobs from a pane, and nowhere else", async () => {
-    const inPane = { QMUX_SOCKET: "/nowhere", QMUX_PANE_ID: "7" };
+  test("Claude's background commands run as komux jobs from a pane, and nowhere else", async () => {
+    const inPane = { KOMUX_SOCKET: "/nowhere", KOMUX_PANE_ID: "7" };
     const tool_input = { command: "cd api && echo 'up'", description: "Start the API", run_in_background: true };
     const background = { hook_event_name: "PreToolUse" as const, tool_name: "Bash" as const, tool_input };
-    expect(backgroundAsJob(background, ["qmux"])).toEqual({
+    expect(backgroundAsJob(background, ["komux"])).toEqual({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
-        updatedInput: { ...tool_input, command: `qmux job run --wait --name 'Start the API' -- bash -c 'cd api && echo '\\''up'\\'''` },
+        updatedInput: { ...tool_input, command: `komux job run --wait --name 'Start the API' -- bash -c 'cd api && echo '\\''up'\\'''` },
       },
     });
     expect(JSON.parse((await runHook(JSON.stringify(background), inPane))!).hookSpecificOutput.updatedInput.command).toContain("job run --wait");
     expect(await runHook(JSON.stringify(background), {})).toBeUndefined();
     expect(await runHook(JSON.stringify({ ...background, tool_input: { command: "ls" } }), inPane)).toBeUndefined();
-    expect(backgroundAsJob({ ...background, tool_input: { command: "qmux job run -- make", run_in_background: true } }, ["qmux"])).toBeUndefined();
-    const wrapped = { ...bash, tool_input: { command: "qmux job run --wait --name x -- bash -c ls" } };
-    expect(permissionForm(wrapped, ["qmux"]).elements[1]).toMatchObject({ options: [{ value: "allow" }, { value: "deny" }] });
+    expect(backgroundAsJob({ ...background, tool_input: { command: "komux job run -- make", run_in_background: true } }, ["komux"])).toBeUndefined();
+    const wrapped = { ...bash, tool_input: { command: "komux job run --wait --name x -- bash -c ls" } };
+    expect(permissionForm(wrapped, ["komux"]).elements[1]).toMatchObject({ options: [{ value: "allow" }, { value: "deny" }] });
   });
 });

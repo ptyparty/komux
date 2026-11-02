@@ -3,9 +3,9 @@ import { parseCall, parseRequest, scriptForm } from "./api.ts";
 
 test("calls are checked against their shapes", () => {
   expect(parseCall("render", [[{ type: "text", text: "hi" }]])).toEqual({ name: "render", args: [[{ type: "text", text: "hi" }]] });
-  expect(() => parseCall("render", [[{ type: "iframe", src: "x" }]])).toThrow("qmux.render");
-  expect(() => parseCall("exec", ["rm -rf /"])).toThrow("qmux.exec");
-  expect(() => parseRequest("fetch", ["https://example.com"])).toThrow("qmux.fetch");
+  expect(() => parseCall("render", [[{ type: "iframe", src: "x" }]])).toThrow("komux.render");
+  expect(() => parseCall("exec", ["rm -rf /"])).toThrow("komux.exec");
+  expect(() => parseRequest("fetch", ["https://example.com"])).toThrow("komux.fetch");
 });
 
 test("script forms can't show pictures, since those read files", () => {

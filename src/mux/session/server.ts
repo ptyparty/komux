@@ -103,7 +103,7 @@ export async function runServer(name: string): Promise<void> {
         session: name,
         controlSocket: paths.control,
         config,
-        configError: error && "Could not load the qmux config; see the session log",
+        configError: error && "Could not load the komux config; see the session log",
         graphics,
         onDetach: () => serialize(() => release(lastTyped, { reason: "detached", message: `Detached from session ${name}` })),
         onQuit: () => serialize(quit),

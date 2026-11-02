@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { defaultConfig, loadConfig, namedTabs, planLayout, projectLayout, projectTab } from "./config.ts";
 import { paneRects } from "./layout.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "qmux-config-"));
+const dir = mkdtempSync(join(tmpdir(), "komux-config-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 function writeConfig(name: string, source: string): string {

@@ -46,7 +46,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   const scheduler = new ReadScheduler(readBudgetMs, readWindowMs);
   const panes = new Map<PaneId, Pane>();
   const graphics = options.graphics;
-  const paneEnv = { ...options.config.env, QMUX_SOCKET: options.controlSocket, QMUX_SESSION: options.session, QMUX_SERVER_ID: randomBytes(8).toString("hex") };
+  const paneEnv = { ...options.config.env, KOMUX_SOCKET: options.controlSocket, KOMUX_SESSION: options.session, KOMUX_SERVER_ID: randomBytes(8).toString("hex") };
   const tabDirs = new TabDirs(join(runtimeDir(), "sessions", options.session, "tabs"));
   let view: MuxView | undefined;
   let stopped = false;
@@ -88,7 +88,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     if (!running || Date.now() - running.started < longCommandMs) return;
     const succeeded = event.code === 0;
     if (workspace.setCommandState(id, succeeded ? "succeeded" : "failed")) {
-      const where = workspace.tabOf(id)?.name ?? "qmux";
+      const where = workspace.tabOf(id)?.name ?? "komux";
       renderer.triggerNotification(succeeded ? "A command finished" : `A command failed (exit ${event.code})`, where);
     }
     refresh();
@@ -175,11 +175,11 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   type SpawnOptions = { holdOnExit?: boolean; holdOnFailure?: boolean; frameless?: boolean; job?: boolean; tabId?: number; callerEnv?: Record<string, string> };
   const spawnPane = (id: PaneId, cwd: string | undefined, command: string[] | undefined, onExit: (id: PaneId) => void, options: SpawnOptions = {}) => {
     const { holdOnExit, holdOnFailure, frameless, job, tabId, callerEnv } = options;
-    const { QMUX_PANE_ID: _pane, TERM: _term, COLORTERM: _colors, ...inherited } = callerEnv ?? {};
+    const { KOMUX_PANE_ID: _pane, TERM: _term, COLORTERM: _colors, ...inherited } = callerEnv ?? {};
     const env: Record<string, string> = { ...inherited, ...paneEnv };
-    if (renderer.capabilities?.kitty_graphics) env.QMUX_KITTY_GRAPHICS = "1";
-    if (tabId !== undefined) env.QMUX_TAB_DIR = tabDirs.tabDir(tabId);
-    if (job) env.QMUX_JOB = String(id);
+    if (renderer.capabilities?.kitty_graphics) env.KOMUX_KITTY_GRAPHICS = "1";
+    if (tabId !== undefined) env.KOMUX_TAB_DIR = tabDirs.tabDir(tabId);
+    if (job) env.KOMUX_JOB = String(id);
     panes.set(id, new Pane(renderer, id, { cwd, command, env, holdOnExit, holdOnFailure, frameless, job, scrollbackBytes }, scheduler, {
       onHeld: () => refresh(),
       onCommand: frameless || holdOnFailure ? undefined : commandEvent,
@@ -308,7 +308,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     const id = workspace.reservePaneId();
     spawnPane(id, host.cwd(askingPane ?? workspace.focused), command, (exited) => workspace.popupExited(exited), { frameless: true });
     if (workspace.openPopup(id, title, askingPane)) {
-      const where = workspace.tabOf(askingPane)?.name ?? "qmux";
+      const where = workspace.tabOf(askingPane)?.name ?? "komux";
       renderer.triggerNotification(title, where);
     }
     refresh();
@@ -430,7 +430,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           if (sessionId) trackSession(paneId, sessionId, state === "clear");
           const notify = workspace.setAgentState(paneId, state === "clear" ? undefined : state, reply, toast, wakeup);
           if (notify) {
-            const where = workspace.tabOf(paneId)?.name ?? "qmux";
+            const where = workspace.tabOf(paneId)?.name ?? "komux";
             renderer.triggerNotification(detail ?? (state === "waiting" ? "An agent needs you" : "An agent finished"), where);
           }
           refresh();

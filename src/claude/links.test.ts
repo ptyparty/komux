@@ -15,8 +15,8 @@ function checkout(name: string, owner: string): string {
 }
 
 beforeEach(() => {
-  dir = realpathSync(mkdtempSync(join(tmpdir(), "qmux-links-")));
-  link = { source: checkout("repo", "qmux"), target: join(dir, "claude", "rules", "jobs.md"), tail: "rules/jobs.md", owner: "qmux" };
+  dir = realpathSync(mkdtempSync(join(tmpdir(), "komux-links-")));
+  link = { source: checkout("repo", "komux"), target: join(dir, "claude", "rules", "jobs.md"), tail: "rules/jobs.md", owner: "komux" };
 });
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -31,7 +31,7 @@ describe("links into a checkout", () => {
 
   test("a link into another checkout of the tool, or a dangling one, is repointed", () => {
     mkdirSync(join(dir, "claude", "rules"), { recursive: true });
-    symlinkSync(checkout("old", "qmux"), link.target);
+    symlinkSync(checkout("old", "komux"), link.target);
     expect(linkState(link)).toBe("outdated");
     applyLink(link);
     expect(readlinkSync(link.target)).toBe(link.source);
@@ -44,7 +44,7 @@ describe("links into a checkout", () => {
     mkdirSync(join(dir, "claude", "rules"), { recursive: true });
     symlinkSync(checkout("dotfiles", "mine"), link.target);
     expect(linkState(link)).toBe("different");
-    expect(applyLink(link)).toBe(join(dir, "claude", "qmux-backup", "rules", "jobs.md"));
+    expect(applyLink(link)).toBe(join(dir, "claude", "komux-backup", "rules", "jobs.md"));
     expect(removeLink(link)).toBe("restored");
     expect(readFileSync(link.target, "utf8")).toBe("dotfiles");
   });
@@ -64,7 +64,7 @@ describe("links into a checkout", () => {
   test("an earlier backup is never overwritten", () => {
     mkdirSync(join(dir, "claude", "rules"), { recursive: true });
     writeFileSync(link.target, "theirs");
-    mkdirSync(join(dir, "claude", "qmux-backup", "rules"), { recursive: true });
+    mkdirSync(join(dir, "claude", "komux-backup", "rules"), { recursive: true });
     writeFileSync(backupPath(link), "older");
     expect(() => applyLink(link)).toThrow("already there");
     expect(readFileSync(link.target, "utf8")).toBe("theirs");
@@ -74,7 +74,7 @@ describe("links into a checkout", () => {
     applyLink(link);
     expect(removeLink(link)).toBe("removed");
     expect(linkState(link)).toBe("missing");
-    symlinkSync(checkout("old", "qmux"), link.target);
+    symlinkSync(checkout("old", "komux"), link.target);
     expect(removeLink(link)).toBe("skipped");
     expect(readlinkSync(link.target)).toBe(join(dir, "old", "rules", "jobs.md"));
   });

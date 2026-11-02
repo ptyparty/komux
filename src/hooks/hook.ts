@@ -44,8 +44,8 @@ export function isWakeup(prompt: unknown): boolean {
 
 export function replyToast(reply: string): QuietToast | undefined {
   const last = reply.trimEnd().split("\n").at(-1)?.trim().replace(/^\*\*(.*)\*\*$/, "$1").trim().toUpperCase();
-  if (last === "QMUX: NO TOAST") return "none";
-  if (last === "QMUX: BRIEF TOAST") return "brief";
+  if (last === "KOMUX: NO TOAST") return "none";
+  if (last === "KOMUX: BRIEF TOAST") return "brief";
   return undefined;
 }
 
@@ -100,7 +100,7 @@ export function permissionDecision(input: PermissionInput, answer: PermissionAns
       return reply(suggestion ? { behavior: "allow", updatedPermissions: [suggestion] } : { behavior: "allow" });
     }
     case "deny": {
-      const reason = typeof answer.reason === "string" && answer.reason.trim() ? answer.reason.trim() : "The user denied this in qmux";
+      const reason = typeof answer.reason === "string" && answer.reason.trim() ? answer.reason.trim() : "The user denied this in komux";
       return reply({ behavior: "deny", message: reason });
     }
     default:
@@ -248,7 +248,7 @@ async function commandRefusal(pane: AskOwner, input: BashInput): Promise<string 
 
 export function backgroundAsJob(input: BashInput, self: string[]): object | undefined {
   const { command, description, run_in_background } = input.tool_input;
-  if (run_in_background !== true || typeof command !== "string" || /^\s*qmux\s+job\b/.test(command)) return undefined;
+  if (run_in_background !== true || typeof command !== "string" || /^\s*komux\s+job\b/.test(command)) return undefined;
   const name = typeof description === "string" && description.trim() ? description.trim() : command;
   const job = shellQuote([...jobRun(self), "--wait", "--name", name, "--", "bash", "-c", command]);
   return { hookSpecificOutput: { hookEventName: "PreToolUse", updatedInput: { ...input.tool_input, command: job } } };
@@ -266,7 +266,7 @@ async function askInPopup(pane: AskOwner, spec: FormSpec, waitingFor: string, si
   await reportState(pane, "waiting", { detail: waitingFor });
   let outcome;
   try {
-    outcome = await ask(new AskStore(), spec, "qmux", Number.POSITIVE_INFINITY, { signal });
+    outcome = await ask(new AskStore(), spec, "komux", Number.POSITIVE_INFINITY, { signal });
   } catch {
     return undefined;
   }
@@ -312,7 +312,7 @@ export async function runHook(stdin: string, env: Record<string, string | undefi
   const session = sessionForEvent(input);
   if (session && input.hook_event_name === "SessionStart") await reportSession(pane, session);
   const asksUser = input.hook_event_name === "PermissionRequest" || (input.hook_event_name === "PreToolUse" && input.tool_name === "AskUserQuestion");
-  if (asksUser && env.QMUX_NATIVE_CLAUDE) return undefined;
+  if (asksUser && env.KOMUX_NATIVE_CLAUDE) return undefined;
   if (input.hook_event_name === "PermissionRequest" && input.tool_name === "ExitPlanMode") {
     const decision = await askPlan(pane, input as unknown as PlanInput);
     return decision ? JSON.stringify(decision) : undefined;
@@ -378,7 +378,7 @@ export function unseenNotice(unseen: UnseenResult[]): string | undefined {
       ? `- "${meta.title}" (${meta.id}) was answered: ${JSON.stringify(result.values)}`
       : `- "${meta.title}" (${meta.id}) was dismissed without an answer. Its popup is closed.`,
   );
-  return ["qmux forms you opened were closed since you last checked on them:", ...lines].join("\n");
+  return ["komux forms you opened were closed since you last checked on them:", ...lines].join("\n");
 }
 
 export function summarizeToolInput(toolInput: Record<string, unknown>): string {

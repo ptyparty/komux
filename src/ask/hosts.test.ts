@@ -3,8 +3,8 @@ import { resolveHost, shellQuote, tmuxArgs, zellijArgs } from "./hosts.ts";
 
 describe("hosts", () => {
   test("auto picks the multiplexer the caller runs in", () => {
-    expect(resolveHost("auto", { QMUX_SOCKET: "/run/qmux.sock" })).toBe("qmux");
-    expect(resolveHost("auto", { QMUX_SOCKET: "/run/qmux.sock", TMUX: "/tmp/tmux-1/default,1,0" })).toBe("tmux");
+    expect(resolveHost("auto", { KOMUX_SOCKET: "/run/komux.sock" })).toBe("komux");
+    expect(resolveHost("auto", { KOMUX_SOCKET: "/run/komux.sock", TMUX: "/tmp/tmux-1/default,1,0" })).toBe("tmux");
     expect(resolveHost("auto", { ZELLIJ: "0" })).toBe("zellij");
     expect(resolveHost("auto", { TMUX: "/tmp/tmux-1/default,1,0" })).toBe("tmux");
     expect(resolveHost("auto", {})).toBe("none");
@@ -12,12 +12,12 @@ describe("hosts", () => {
   });
 
   test("zellij opens a pinned floating pane that closes with the form", () => {
-    expect(zellijArgs(["qmux", "form", "--ask", "x"], "Deploy")).toEqual([
+    expect(zellijArgs(["komux", "form", "--ask", "x"], "Deploy")).toEqual([
       "zellij", "run",
       "--floating", "--close-on-exit", "--pinned", "true",
-      "--name", "qmux: Deploy",
+      "--name", "komux: Deploy",
       "--width", "80%", "--height", "80%", "--x", "10%", "--y", "10%",
-      "--", "qmux", "form", "--ask", "x",
+      "--", "komux", "form", "--ask", "x",
     ]);
   });
 

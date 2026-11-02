@@ -16,9 +16,9 @@ export async function runScriptHost(id: string): Promise<void> {
   const store = new ScriptStore();
   const meta = store.meta(id);
   const { source, input } = store.program(id);
-  const socket = process.env.QMUX_SOCKET;
-  const jobId = Number(process.env.QMUX_JOB);
-  if (!socket || !Number.isInteger(jobId)) throw new Error("qmux script host runs as a qmux job; use qmux script run");
+  const socket = process.env.KOMUX_SOCKET;
+  const jobId = Number(process.env.KOMUX_JOB);
+  if (!socket || !Number.isInteger(jobId)) throw new Error("komux script host runs as a komux job; use komux script run");
   store.markRunning(id, process.pid);
 
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
@@ -33,11 +33,11 @@ export async function runScriptHost(id: string): Promise<void> {
 
   const control = async (request: ControlRequest): Promise<unknown> => {
     const response = await sendControl(socket, request);
-    if (!response.ok) throw new Error(response.error.includes("Invalid input") ? "this qmux session is older than qmux script; restart it to use scripts" : response.error);
+    if (!response.ok) throw new Error(response.error.includes("Invalid input") ? "this komux session is older than komux script; restart it to use scripts" : response.error);
     return response.result;
   };
   const report = (error: Error) => {
-    store.log(id, `qmux: ${error.message}`);
+    store.log(id, `komux: ${error.message}`);
     view.status(error.message);
   };
 
@@ -95,7 +95,7 @@ export async function runScriptHost(id: string): Promise<void> {
         if (shown) await control({ method: "job.hide", params: { jobId } });
         try {
           const askStore = new AskStore();
-          const outcome = await ask(askStore, form, "qmux", 0, { owner: askOwner(process.env), signal: asks.signal });
+          const outcome = await ask(askStore, form, "komux", 0, { owner: askOwner(process.env), signal: asks.signal });
           if (outcome.status.status !== "pending") return outcome.status;
           return await askStore.settled(outcome.id, { signal: asks.signal });
         } finally {

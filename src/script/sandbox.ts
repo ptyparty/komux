@@ -21,7 +21,7 @@ const prelude = `(() => {
   delete globalThis.__request;
   let onEvent;
   let onMessage;
-  globalThis.qmux = Object.freeze({
+  globalThis.komux = Object.freeze({
     render: (elements) => call("render", [elements]),
     show: () => call("show", []),
     hide: () => call("hide", []),

@@ -20,8 +20,8 @@ self.onmessage = async (event: MessageEvent<ToWorker>) => {
       sandbox = await Sandbox.start(message.source, message.input, {
         call: (name, args) => {
           const call = parseCall(name, args);
-          if (call.name === "render" && JSON.stringify(call.args[0]).length > maxRenderBytes) throw new ScriptCallError(`qmux.render: a panel may hold at most ${maxRenderBytes} bytes`);
-          if (call.name === "reply" && (JSON.stringify(call.args[0]) ?? "").length > maxReplyBytes) throw new ScriptCallError(`qmux.reply: a reply may hold at most ${maxReplyBytes} bytes`);
+          if (call.name === "render" && JSON.stringify(call.args[0]).length > maxRenderBytes) throw new ScriptCallError(`komux.render: a panel may hold at most ${maxRenderBytes} bytes`);
+          if (call.name === "reply" && (JSON.stringify(call.args[0]) ?? "").length > maxReplyBytes) throw new ScriptCallError(`komux.reply: a reply may hold at most ${maxReplyBytes} bytes`);
           post({ type: "call", call });
         },
         request: (name, args) => {

@@ -6,14 +6,14 @@ type Target = { command: string[]; env: Record<string, string | undefined>; proc
 
 const { values } = parseArgs({
   options: {
-    target: { type: "string", default: "qmux" },
+    target: { type: "string", default: "komux" },
     panes: { type: "string", default: "16" },
     busy: { type: "string" },
     probes: { type: "string", default: "200" },
     cols: { type: "string", default: "200" },
     rows: { type: "string", default: "60" },
     warmup: { type: "string", default: "4" },
-    "big-file": { type: "string", default: "/tmp/qmux-bench-big.txt" },
+    "big-file": { type: "string", default: "/tmp/komux-bench-big.txt" },
     fps: { type: "string", default: "60" },
     throughput: { type: "boolean", default: false },
   },
@@ -22,12 +22,12 @@ const { values } = parseArgs({
 const paneCount = Number(values.panes);
 const busyCount = values.busy === undefined ? paneCount - 1 : Number(values.busy);
 const bigFile = await ensureBigFile(values["big-file"]!);
-const doneMarker = "QMUX" + "BENCHDONE";
+const doneMarker = "KOMUX" + "BENCHDONE";
 const firstPane = values.throughput
   ? { title: "throughput", command: ["sh", "-c", `sleep 1; for i in 1 2 3 4 5 6 7 8 9 10; do cat ${bigFile}; done; echo ${doneMarker.slice(0, 4)}""${doneMarker.slice(4)}; sleep 600`] }
   : echoPane;
 const workloads = [firstPane, ...busyWorkloads(busyCount, bigFile), ...idleWorkloads(paneCount - 1 - busyCount)];
-const target = values.target === "zellij" ? await zellijTarget(workloads) : await qmuxTarget(workloads);
+const target = values.target === "zellij" ? await zellijTarget(workloads) : await komuxTarget(workloads);
 
 const decoder = new TextDecoder();
 let output = "";
@@ -88,7 +88,7 @@ for (let probe = 0; probe < Number(values.probes); probe++) {
   if (seen) latencies.push(performance.now() - sent);
   else {
     timeouts++;
-    if (process.env.QMUX_BENCH_DEBUG) {
+    if (process.env.KOMUX_BENCH_DEBUG) {
       const state = (() => { try { return readFileSync(`/proc/${child.pid}/stat`, "utf8").split(") ")[1]!.split(" ")[0] + " wchan=" + readFileSync(`/proc/${child.pid}/wchan`, "utf8"); } catch (e) { return String(e); } })();
       console.error(`probe ${probe} timed out; exit=${child.exitCode} state=${state}; output: ${JSON.stringify(output.slice(0, 200))}`);
     }
@@ -129,16 +129,16 @@ function idleWorkloads(count: number): Workload[] {
   return Array.from({ length: Math.max(count, 0) }, () => ({ title: "idle", command: ["sh", "-c", "while :; do sleep 60; done"] }));
 }
 
-async function qmuxTarget(workloadsToRun: Workload[]): Promise<Target> {
-  const workloadFile = `/tmp/qmux-bench-workloads-${process.pid}.json`;
+async function komuxTarget(workloadsToRun: Workload[]): Promise<Target> {
+  const workloadFile = `/tmp/komux-bench-workloads-${process.pid}.json`;
   await Bun.write(workloadFile, JSON.stringify(workloadsToRun));
   const command = [process.execPath, `${import.meta.dir}/grid-app.ts`, "--workloads", workloadFile, "--fps", values.fps!];
   return { command, env: { ...process.env }, processIds: (rootPid) => [rootPid], cleanup: async () => {} };
 }
 
 async function zellijTarget(workloadsToRun: Workload[]): Promise<Target> {
-  const session = `qmux-bench-${process.pid}`;
-  const dir = `/tmp/qmux-bench-zellij-${process.pid}`;
+  const session = `komux-bench-${process.pid}`;
+  const dir = `/tmp/komux-bench-zellij-${process.pid}`;
   await Bun.write(`${dir}/config.kdl`, 'show_startup_tips false\nshow_release_notes false\npane_frames true\nsession_serialization false\n');
   await Bun.write(`${dir}/layout.kdl`, zellijLayout(workloadsToRun, 4));
   const env: Record<string, string | undefined> = { ...process.env, TERM: "xterm-256color" };

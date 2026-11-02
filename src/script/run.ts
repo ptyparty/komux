@@ -6,9 +6,9 @@ import { ScriptLaunchError, ScriptStore, type ScriptMeta } from "./store.ts";
 export type StartOptions = { name?: string; show?: boolean; dock?: boolean; cwd?: string };
 
 export async function startScript(store: ScriptStore, source: string, input: unknown, options: StartOptions = {}, env: Record<string, string | undefined> = process.env): Promise<ScriptMeta> {
-  const socket = env.QMUX_SOCKET;
-  const near = Number(env.QMUX_PANE_ID);
-  if (!socket || !Number.isInteger(near)) throw new ScriptLaunchError("qmux scripts run from inside a qmux pane");
+  const socket = env.KOMUX_SOCKET;
+  const near = Number(env.KOMUX_PANE_ID);
+  if (!socket || !Number.isInteger(near)) throw new ScriptLaunchError("komux scripts run from inside a komux pane");
   try {
     transpile(source);
   } catch (error) {
