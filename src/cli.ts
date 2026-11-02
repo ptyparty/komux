@@ -541,7 +541,7 @@ async function jobCommand(args: string[]): Promise<void> {
     if (!response.ok) throw new SessionError(response.error);
     return response.result;
   };
-  const { jobId, log } = (await control({ method: "job.run", params: { command: positionals, near, name: values.name, cwd: process.cwd(), env: definedEnv() } })) as { jobId: number; log: string };
+  const { jobId, log } = (await control({ method: "job.run", params: { command: positionals, near, name: values.name, cwd: process.cwd(), env: definedEnv(), awaited: values.wait === true } })) as { jobId: number; log: string };
   if (!values.wait) {
     console.log(jobId);
     return;

@@ -1303,6 +1303,23 @@ describe("Workspace", () => {
       expect(workspace.agents.has(claude)).toBe(false);
     });
 
+    test("an agent awaits the running jobs it started, not the ones started near it", () => {
+      const { workspace } = ide({ now: 0 });
+      const claude = workspace.runJob(2, ["komux", "claude"], "claude")!;
+      const build = workspace.runJob(claude, ["scripts/build"], "build", { startedBy: claude })!;
+      workspace.runJob(claude, ["scripts/test"], "test", { startedBy: claude });
+      workspace.runJob(claude, ["scripts/up"], "up");
+      expect(workspace.awaitedJobs(claude)).toBe(2);
+      expect(workspace.awaitedJobs(2)).toBe(0);
+      workspace.jobFinished(build, 0);
+      expect(workspace.awaitedJobs(claude)).toBe(1);
+      workspace.jobFinished(claude, 0);
+      workspace.openJob(claude);
+      press(workspace, "return");
+      expect(workspace.jobStatus(claude)?.state).toBe("running");
+      expect(workspace.awaitedJobs(claude)).toBe(0);
+    });
+
     test("the last pane in a tab can't go to the background", () => {
       const host = new FakeHost();
       const workspace = new Workspace(host);
