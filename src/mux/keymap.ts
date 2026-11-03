@@ -24,6 +24,7 @@ export type Command =
   | { type: "close-popup" }
   | { type: "next-attention" }
   | { type: "compose-claude" }
+  | { type: "context-claude" }
   | { type: "peek-reply" }
   | { type: "dismiss-toast" }
   | { type: "toggle-job" }
@@ -82,6 +83,7 @@ export const keymap: Record<Mode, ModeKeys> = {
       { keys: ["alt+e"], command: { type: "cycle-pane", delta: 1 } },
       { keys: ["alt+a"], command: { type: "next-attention" } },
       { keys: ["alt+c"], command: { type: "compose-claude" } },
+      { keys: ["alt+shift+c", "alt+shift+C"], command: { type: "context-claude" } },
       { keys: ["alt+p"], command: { type: "peek-reply" } },
       { keys: ["alt+x"], command: { type: "dismiss-toast" } },
       { keys: ["alt+j"], command: { type: "toggle-job" } },
@@ -92,6 +94,7 @@ export const keymap: Record<Mode, ModeKeys> = {
       { keys: "Alt o/e", description: "prev/next pane" },
       { keys: "Alt a", description: "next agent needing you" },
       { keys: "Alt c", description: "message Claude" },
+      { keys: "Alt C", description: "message Claude about this" },
       { keys: "Alt p", description: "peek at a reply" },
       { keys: "Alt j", description: "hide or reopen a job or question" },
       { keys: "Alt d", description: "shell drawer" },

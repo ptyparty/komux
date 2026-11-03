@@ -168,7 +168,27 @@ Scripts run in QuickJS compiled to WebAssembly, on a thread of their own. The sa
 - **PgUp/PgDn** or the mouse wheel scroll back through the conversation.
 - **Ctrl+d** on an empty box quits and prints `claude --resume <id>`, so the conversation can carry on in Claude's TUI. A conversation can't be open in both at once.
 
-Permission requests, plans to review and Claude's questions open as the same komux popups the hooks use, wherever you are in the tab, and the hooks keep the tab's `🧠` and `🚀` badges up to date. From any pane in the tab, **Alt+c** opens a box that sends a message to the tab's native Claude (the focused one, or else the first) without moving focus. Typing `/` there lists Claude's commands too, like the native view. A program in a pane can open the same box with something attached: `komux claude compose --from-stdin --label LABEL` shows LABEL above the text, and on send puts what it read from stdin ahead of your message. quoll uses this for comments, through `QUOLL_COMMENT_COMMAND`.
+Permission requests, plans to review and Claude's questions open as the same komux popups the hooks use, wherever you are in the tab, and the hooks keep the tab's `🧠` and `🚀` badges up to date. From any pane in the tab, **Alt+c** opens a box that sends a message to the tab's native Claude (the focused one, or else the first) without moving focus. Typing `/` there lists Claude's commands too, like the native view. **Alt+shift+c** opens the same box with what you're looking at attached: komux asks the focused pane's program for context, and the box shows a chip for each piece. Backspace in an empty box drops the last chip, and on send the context goes ahead of your message. quoll, remax and kowari answer; any other program gets the plain box, and the status line says so.
+
+### Context from a pane
+
+A program offers context by listening on `$KOMUX_TAB_DIR/context/$KOMUX_PANE_ID.sock` while it runs and removing it on exit. On Alt+shift+c, komux connects to the focused pane's socket and the two trade one JSON line at a time, on one connection that stays open while you pick.
+
+| komux sends | Meaning |
+|---|---|
+| `{"context": 1}` | The user pressed the key |
+| `{"cancel": true}` | The user pressed it again; leave pick mode |
+
+| The program answers | Meaning |
+|---|---|
+| `{"picking": "Pick a block, Esc cancels"}` | Pick mode is on; komux shows the hint on its status line and waits |
+| `{"attach": [{"label": "…", "text": "…"}]}` | The context; komux opens the box and closes the connection |
+| `{"none": "Nothing selected"}` | No context; komux opens the plain box and shows the reason |
+| `{"cancelled": true}` | The user left pick mode in the program; no box opens |
+
+The first answer must come within a second, or komux opens the plain box; after `picking` it waits as long as it takes. Closing the connection at either end cancels. `text` is markdown that tells Claude where the context is, with a path it can open, then a quote. Send images and long output as file paths.
+
+`komux claude compose --from-stdin --label LABEL` still opens the box with stdin attached, for programs that predate the socket. It will go away.
 
 Started without `--resume` or `--continue` in a directory with past conversations, `komux claude` first lists them in the pane: conversations open in another komux pane, ones running in other terminals, **New conversation**, and the last few past ones with their age and last prompt. Picking one open in a komux pane moves focus there and closes this pane instead of opening the conversation twice. Esc quits. Run as a job, such as from a layout, it waits without starting Claude: its dock row reads `not started · Alt c`. **Alt c** in that tab (or Enter in the job) shows the picker, which adds **Don't start Claude** to close the job (Ctrl+s s starts it again). After you pick, the job hides itself and the message box opens for your first message. Esc in the picker puts it back to waiting.
 
