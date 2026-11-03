@@ -57,7 +57,6 @@ def prepare(repo):
         project,
         [os.path.join(ptyparty, 'quoll', 'skills', 'quoll'), os.path.join(ptyparty, 'remax', 'skills', 'remax-review')],
         env,
-        trim_watch=True,
     )
     return project, env
 
