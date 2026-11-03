@@ -1511,6 +1511,33 @@ describe("Workspace", () => {
       expect(workspace.agents.has(agent)).toBe(false);
     });
 
+    test("a wakeup turn that runs past a second shows as working, and a quiet end puts the old badge back", () => {
+      const clock = { now: 5 };
+      const { workspace } = ide(clock);
+      const agent = workspace.focused;
+      press(workspace, "ctrl+t", "c");
+      workspace.setAgentState(agent, "done", "Shall I start?");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.nextWakeupShown()).toBe(1000);
+      clock.now += 999;
+      workspace.showLongWakeups();
+      expect(workspace.agents.get(agent)).toBe("done");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      clock.now += 1;
+      workspace.showLongWakeups();
+      expect(workspace.agents.get(agent)).toBe("working");
+      expect(workspace.nextWakeupShown()).toBeUndefined();
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      expect(workspace.wakeups.has(agent)).toBe(true);
+      workspace.setAgentState(agent, "done", "Nothing new.", "none");
+      expect(workspace.agents.get(agent)).toBe("done");
+      workspace.setAgentState(agent, "working", undefined, undefined, true);
+      clock.now += 1000;
+      workspace.showLongWakeups();
+      expect(workspace.setAgentState(agent, "done", "The tour is ready.")).toBe(true);
+      expect(workspace.toasts()).toMatchObject([{ kind: "reply", reply: { text: "The tour is ready." } }]);
+    });
+
     test("a wakeup that needs you, or arrives mid-turn, changes state as usual", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;

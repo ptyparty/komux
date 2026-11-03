@@ -32,6 +32,7 @@ const urgency: Record<AgentState, number> = { waiting: 4, failed: 3, done: 2, wo
 const commandUrgency: Record<CommandState, number> = { failed: 3, succeeded: 2, running: 1 };
 const popupDelayMs = 1500;
 const toastMs = 5000;
+const wakeupGraceMs = 1000;
 const keptFinishedJobs = 5;
 const keptReplies = 10;
 const drawerHeights = { initial: 40, step: 10, min: 20, max: 80 };
@@ -94,7 +95,7 @@ export class Workspace {
   readonly replies = new Map<PaneId, Reply[]>();
   private readonly beforeTurn = new Map<PaneId, AgentState | undefined>();
   private readonly quieted = new Set<PaneId>();
-  readonly wakeups = new Set<PaneId>();
+  readonly wakeups = new Map<PaneId, number>();
   readonly activities = new Map<PaneId, string>();
   readonly modes = new Map<PaneId, string>();
   readonly dormant = new Set<PaneId>();
@@ -246,10 +247,11 @@ export class Workspace {
     this.markAgent(id);
     const previous = this.agents.get(id);
     const busy = previous === "working" || previous === "waiting";
+    if (state === "working" && wakeup && this.wakeups.has(id)) return false;
     if (state === "working" && wakeup && !busy) {
       this.beforeTurn.set(id, previous);
       this.quieted.delete(id);
-      this.wakeups.add(id);
+      this.wakeups.set(id, this.now());
       return false;
     }
     const wokeUp = this.wakeups.delete(id);
@@ -274,6 +276,17 @@ export class Workspace {
     const changed = previous !== state || wokeUp;
     this.agents.set(id, state);
     return changed && !watching && state !== "working";
+  }
+
+  showLongWakeups(): void {
+    for (const [id, started] of this.wakeups) {
+      if (this.now() - started >= wakeupGraceMs) this.agents.set(id, "working");
+    }
+  }
+
+  nextWakeupShown(): number | undefined {
+    const left = [...this.wakeups].filter(([id]) => this.agents.get(id) !== "working").map(([, started]) => started + wakeupGraceMs - this.now());
+    return left.length > 0 ? Math.max(Math.min(...left), 0) : undefined;
   }
 
   private keepReply(id: PaneId, reply: Reply): void {
@@ -477,13 +490,13 @@ export class Workspace {
     if (index < 0) return;
     const tab = this.tabs[index]!;
     const name = job.name;
-    const [agent, reply, quiet, woken] = [this.agents.get(job.id), this.replies.get(job.id), this.quieted.has(job.id), this.wakeups.has(job.id)];
+    const [agent, reply, quiet, woken] = [this.agents.get(job.id), this.replies.get(job.id), this.quieted.has(job.id), this.wakeups.get(job.id)];
     const before = this.beforeTurn.has(job.id) ? { state: this.beforeTurn.get(job.id) } : undefined;
     this.forgetJob(job.id);
     if (agent) this.agents.set(job.id, agent);
     if (reply) this.replies.set(job.id, reply);
     if (quiet) this.quieted.add(job.id);
-    if (woken) this.wakeups.add(job.id);
+    if (woken !== undefined) this.wakeups.set(job.id, woken);
     if (before) this.beforeTurn.set(job.id, before.state);
     this.host.untrackJob(job.id);
     this.paneNames.set(job.id, name);
