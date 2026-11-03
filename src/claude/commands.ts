@@ -15,7 +15,12 @@ const quitCommands: SlashCommand[] = [
   { name: "quit", description: "Same as /exit" },
 ];
 
-export const localCommands: SlashCommand[] = [...quitCommands, { name: "mode", description: "Change the permission mode", argumentHint: permissionModes.join("|") }];
+export const localCommands: SlashCommand[] = [
+  ...quitCommands,
+  { name: "clear", description: "Start a new conversation here" },
+  { name: "resume", description: "Pick a conversation to carry on here" },
+  { name: "mode", description: "Change the permission mode", argumentHint: permissionModes.join("|") },
+];
 
 export function matchCommands(commands: SlashCommand[], input: string, limit = 8, withQuit = true): SlashCommand[] {
   const argument = /^\/mode\s+(\S*)$/i.exec(input)?.[1];
@@ -55,6 +60,10 @@ export function nextMode(mode: string | undefined): PermissionMode {
   return permissionModes[(permissionModes.indexOf(mode as PermissionMode) + 1) % permissionModes.length]!;
 }
 
-export function isQuit(text: string): boolean {
-  return ["/exit", "/quit"].includes(text.trim().toLowerCase());
+export type Leave = "quit" | "clear" | "resume";
+
+const leaveCommands: Record<string, Leave> = { "/exit": "quit", "/quit": "quit", "/clear": "clear", "/resume": "resume" };
+
+export function leaveCommand(text: string): Leave | undefined {
+  return leaveCommands[text.trim().toLowerCase()];
 }

@@ -2,7 +2,7 @@ import { BoxRenderable, MarkdownRenderable, ScrollBoxRenderable, TextareaRendera
 import { markdownStyle } from "../form/view.ts";
 import { theme } from "../mux/theme.ts";
 import { styled } from "../ui/styled.ts";
-import { isQuit } from "./commands.ts";
+import { leaveCommand, type Leave } from "./commands.ts";
 import { SlashCompletion } from "./completion.ts";
 import type { ClaudeSession } from "./session.ts";
 import type { Entry, SessionState } from "./transcript.ts";
@@ -23,6 +23,7 @@ export const composeKeyBindings = [
 ];
 
 export class ClaudeView {
+  private readonly root: BoxRenderable;
   private readonly status: TextRenderable;
   private readonly scroll: ScrollBoxRenderable;
   private readonly input: TextareaRenderable;
@@ -34,10 +35,10 @@ export class ClaudeView {
   constructor(
     private readonly renderer: CliRenderer,
     private readonly session: ClaudeSession,
-    private readonly onQuit: () => void,
+    private readonly onLeave: (how: Leave) => void,
   ) {
     this.style = markdownStyle(renderer);
-    const root = new BoxRenderable(renderer, { flexDirection: "column", width: "100%", height: "100%", backgroundColor: theme.background });
+    const root = (this.root = new BoxRenderable(renderer, { flexDirection: "column", width: "100%", height: "100%", backgroundColor: theme.background }));
     this.status = new TextRenderable(renderer, { height: 1, flexShrink: 0, bg: theme.surface, wrapMode: "none" });
     this.scroll = new ScrollBoxRenderable(renderer, { flexGrow: 1, stickyScroll: true, stickyStart: "bottom", paddingLeft: 1, paddingRight: 1 });
     this.scroll.content.flexDirection = "column";
@@ -88,13 +89,16 @@ export class ClaudeView {
 
   destroy(): void {
     this.renderer.keyInput.off("keypress", this.onKey);
+    this.renderer.root.remove(this.root);
+    this.root.destroyRecursively();
   }
 
   private submit(): void {
     const text = this.input.plainText.trim();
     if (!text) return;
     this.input.clear();
-    if (isQuit(text)) return this.onQuit();
+    const how = leaveCommand(text);
+    if (how) return this.onLeave(how);
     this.session.send(text);
   }
 
@@ -117,7 +121,7 @@ export class ClaudeView {
       key.preventDefault();
     } else if (key.ctrl && key.name === "d" && this.input.plainText === "") {
       key.preventDefault();
-      this.onQuit();
+      this.onLeave("quit");
     }
   };
 

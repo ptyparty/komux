@@ -101,3 +101,30 @@ export function claudeOptions(args: string[]): Partial<Options> {
   if (lists.plugins.length > 0) options.plugins = lists.plugins.map((path) => ({ type: "local", path }));
   return Object.keys(extraArgs).length > 0 ? { ...options, extraArgs } : options;
 }
+
+const sessionFlags: Record<string, "none" | "optional" | "required"> = {
+  "--resume": "optional",
+  "-r": "optional",
+  "--continue": "none",
+  "-c": "none",
+  "--session-id": "required",
+  "--fork-session": "optional",
+  "--from-pr": "optional",
+  "--permission-mode": "required",
+};
+
+export function freshArgs(args: string[], mode: string | undefined): string[] {
+  const kept: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]!;
+    const inline = arg.startsWith("--") && arg.includes("=");
+    const takes = sessionFlags[inline ? arg.slice(0, arg.indexOf("=")) : arg];
+    if (takes === undefined) {
+      kept.push(arg);
+      continue;
+    }
+    const next = args[index + 1];
+    if (!inline && next !== undefined && (takes === "required" || (takes === "optional" && !next.startsWith("-")))) index++;
+  }
+  return mode ? [...kept, "--permission-mode", mode] : kept;
+}

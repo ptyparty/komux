@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isQuit, matchCommands, modeArgument, nextMode, parseCommands, parseMode } from "./commands.ts";
+import { leaveCommand, matchCommands, modeArgument, nextMode, parseCommands, parseMode } from "./commands.ts";
 
 const commands = [
   { name: "compact", description: "Compact the conversation" },
@@ -12,8 +12,8 @@ describe("slash command completion", () => {
   test("matches names that start with what was typed, then ones that contain it", () => {
     expect(matchCommands(commands, "/co").map((command) => command.name)).toEqual(["compact", "context", "code-review"]);
     expect(matchCommands(commands, "/view").map((command) => command.name)).toEqual(["code-review"]);
-    expect(matchCommands(commands, "/").map((command) => command.name)).toEqual(["exit", "quit", "mode", "compact", "context", "code-review", "model"]);
-    expect(matchCommands(commands, "/", 8, false).map((command) => command.name)).toEqual(["mode", "compact", "context", "code-review", "model"]);
+    expect(matchCommands(commands, "/").map((command) => command.name)).toEqual(["exit", "quit", "clear", "resume", "mode", "compact", "context", "code-review"]);
+    expect(matchCommands(commands, "/", 8, false).map((command) => command.name)).toEqual(["clear", "resume", "mode", "compact", "context", "code-review", "model"]);
   });
 
   test("only completes the command word, and only for slash input", () => {
@@ -44,7 +44,8 @@ describe("slash command completion", () => {
     expect([nextMode("default"), nextMode("auto"), nextMode(undefined)]).toEqual(["acceptEdits", "default", "default"]);
   });
 
-  test("/exit and /quit quit, in any case", () => {
-    expect([isQuit("/exit"), isQuit("/Quit "), isQuit("/exits")]).toEqual([true, true, false]);
+  test("/exit and /quit quit, and /clear and /resume swap the conversation, in any case", () => {
+    expect([leaveCommand("/exit"), leaveCommand("/Quit "), leaveCommand("/exits")]).toEqual(["quit", "quit", undefined]);
+    expect([leaveCommand("/clear"), leaveCommand(" /Resume"), leaveCommand("/resume abc")]).toEqual(["clear", "resume", undefined]);
   });
 });
