@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { claudeOptions } from "./options.ts";
+import { claudeOptions, freshArgs } from "./options.ts";
 
 describe("claudeOptions", () => {
   test("turns Claude's command-line flags into SDK options", () => {
@@ -36,5 +36,12 @@ describe("claudeOptions", () => {
     expect(() => claudeOptions(["--mcp-config", "a.json", "b.json"])).toThrow("only one value to --mcp-config");
     expect(() => claudeOptions(["--resume"])).toThrow("give --resume a session id");
     expect(() => claudeOptions(["-r", "--verbose"])).toThrow("give --resume a session id");
+  });
+});
+
+describe("freshArgs", () => {
+  test("drops what picked the last conversation and keeps the mode it ended in", () => {
+    expect(freshArgs(["--resume", "abc", "--permission-mode=plan", "--model", "haiku", "-c", "--session-id", "x", "--verbose"], "auto")).toEqual(["--model", "haiku", "--verbose", "--permission-mode", "auto"]);
+    expect(freshArgs(["--resume=abc", "--permission-mode", "plan", "--fork-session", "--add-dir", "/tmp"], undefined)).toEqual(["--add-dir", "/tmp"]);
   });
 });

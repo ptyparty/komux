@@ -3,11 +3,11 @@ import { theme } from "../mux/theme.ts";
 import { styled } from "../ui/styled.ts";
 export type Option<T> = { label: string; detail: string; value: T };
 
-export function pick<T>(renderer: CliRenderer, title: string, subtitle: string, items: Option<T>[]): Promise<T | undefined> {
+export function pick<T>(renderer: CliRenderer, title: string, subtitle: string, items: Option<T>[], escape = "quit"): Promise<T | undefined> {
   const root = new BoxRenderable(renderer, { flexDirection: "column", width: "100%", height: "100%", backgroundColor: theme.background, padding: 1 });
   const heading = new TextRenderable(renderer, {
     height: 2,
-    content: styled([bold(fg(theme.accent)(title)), fg(theme.muted)(`  ${subtitle}\n↑↓ choose · Enter pick · Esc quit`)]),
+    content: styled([bold(fg(theme.accent)(title)), fg(theme.muted)(`  ${subtitle}\n↑↓ choose · Enter pick · Esc ${escape}`)]),
   });
   const select = new SelectRenderable(renderer, {
     flexGrow: 1,

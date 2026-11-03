@@ -12,7 +12,8 @@ import { reportState } from "../hooks/hook.ts";
 import { askOwner } from "../ask/ask.ts";
 import type { Entry } from "./transcript.ts";
 import { ClaudeView, composeKeyBindings } from "./view.ts";
-import { parseCommands, type SlashCommand } from "./commands.ts";
+import { leaveCommand, parseCommands, type Leave, type SlashCommand } from "./commands.ts";
+import { freshArgs } from "./options.ts";
 import { SlashCompletion } from "./completion.ts";
 import { deliver } from "./inbox.ts";
 
@@ -63,56 +64,83 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
     await renderer.closed;
     return;
   }
-  const history = choice.kind === "resume" ? await readHistory(projectDir(process.cwd()), choice.sessionId) : [];
-  if (choice.kind === "resume") args = ["--resume", choice.sessionId, ...args];
   if (inbox) await hideOwnJob();
+  const awaken = Boolean(inbox);
   let view: ClaudeView | undefined;
   let failure: string | undefined;
   let quit: () => void = () => {};
-  const quitting = new Promise<void>((resolve) => (quit = resolve));
+  const quitting = new Promise<"quit">((resolve) => (quit = () => resolve("quit")));
   for (const signal of signals) process.on(signal, quit);
   try {
     const report = activityReporter();
     const reportMode = modeReporter();
-    session = new ClaudeSession({
-      cwd: process.cwd(),
-      args,
-      env: process.env,
-      decide: (request, signal) => decidePermission(request, process.env, signal),
-      onInterrupted: () => {
-        const owner = askOwner(process.env);
-        if (owner) void reportState(owner, "done").catch(() => {});
-      },
-      onChange: () => {
-        view?.render();
-        if (session) {
-          report(session.transcript.entries);
-          reportMode(session.transcript.mode);
-        }
+    inbox ??= await openInbox((text) => (deliverTo ? deliverTo(text) : queued.push(text)), {
+      commands: () => session?.commands ?? [],
+      mode: () => session?.transcript.mode,
+      cycleMode: () => {
+        session?.cycleMode();
+        return session?.transcript.mode;
       },
     });
-    reportMode(session.transcript.mode);
-    session.transcript.replay(history);
-    view = new ClaudeView(renderer, session, () => quit());
-    view.render();
-    const target = session;
-    deliverTo = (text) => target.send(text);
-    for (const text of queued.splice(0)) deliverTo(text);
-    if (inbox) {
-      await inbox.awaken();
-      await requestCompose();
-    } else
-      inbox = await openInbox(deliverTo, {
-        commands: () => target.commands,
-        mode: () => target.transcript.mode,
-        cycleMode: () => {
-          target.cycleMode();
-          return target.transcript.mode;
+    let sessionArgs = args;
+    let cleared = false;
+    for (let first = true; ; first = false) {
+      const history = choice.kind === "resume" ? await readHistory(projectDir(process.cwd()), choice.sessionId) : [];
+      let leave: (how: Leave) => void = () => {};
+      const leaving = new Promise<Leave>((resolve) => (leave = resolve));
+      const target = new ClaudeSession({
+        cwd: process.cwd(),
+        args: choice.kind === "resume" ? ["--resume", choice.sessionId, ...sessionArgs] : sessionArgs,
+        env: process.env,
+        decide: (request, signal) => decidePermission(request, process.env, signal),
+        onInterrupted: () => {
+          const owner = askOwner(process.env);
+          if (owner) void reportState(owner, "done").catch(() => {});
+        },
+        onChange: () => {
+          if (session !== target) return;
+          view?.render();
+          report(target.transcript.entries);
+          reportMode(target.transcript.mode);
         },
       });
-    const code = await Promise.race([quitting.then(() => 0), session.exited]);
-    const last = session.transcript.entries.at(-1);
-    if (code !== 0 && last?.kind === "notice") failure = last.text;
+      session = target;
+      reportMode(target.transcript.mode);
+      target.transcript.replay(history);
+      if (cleared) target.transcript.notice("New conversation · /resume goes back to the last one");
+      view = new ClaudeView(renderer, target, leave);
+      view.render();
+      deliverTo = (text) => {
+        const how = leaveCommand(text);
+        if (how === "clear" || how === "resume") leave(how);
+        else target.send(text);
+      };
+      for (const text of queued.splice(0)) deliverTo(text);
+      if (first && awaken && inbox) {
+        await inbox.awaken();
+        await requestCompose();
+      }
+      const ended = target.exited.then((code) => ({ how: "quit" as const, code }));
+      const outcome = await Promise.race([quitting.then((how) => ({ how, code: 0 })), leaving.then((how) => ({ how, code: 0 })), ended]);
+      if (outcome.how === "quit") {
+        const last = target.transcript.entries.at(-1);
+        if (outcome.code !== 0 && last?.kind === "notice") failure = last.text;
+        break;
+      }
+      deliverTo = undefined;
+      view.destroy();
+      view = undefined;
+      const left = target.transcript.sessionId;
+      const mode = target.transcript.mode;
+      target.stop();
+      await Promise.race([target.exited, Bun.sleep(2000)]);
+      const owner = askOwner(process.env);
+      if (owner) await reportState(owner, "clear");
+      sessionArgs = freshArgs(args, mode);
+      cleared = outcome.how === "clear" && left !== undefined;
+      if (outcome.how === "clear") choice = { kind: "new" };
+      else choice = (await chooseSession(renderer, { resuming: true })) ?? (left ? { kind: "resume", sessionId: left } : { kind: "new" });
+    }
   } finally {
     for (const signal of signals) process.off(signal, quit);
     view?.destroy();
@@ -146,16 +174,16 @@ async function offerSetup(renderer: CliRenderer): Promise<void> {
   if (answer === "never") await declineItems(items.map((item) => item.id)).catch(() => undefined);
 }
 
-async function chooseSession(renderer: CliRenderer): Promise<Choice | undefined> {
+async function chooseSession(renderer: CliRenderer, { resuming = false } = {}): Promise<Choice | undefined> {
   const cwd = process.cwd();
   const dir = projectDir(cwd);
   const known = sessionIds(dir);
   if (known.length === 0) return { kind: "new" };
-  const [past, running, live] = await Promise.all([pastSessions(dir, 8), runningSessions(cwd), liveSessions()]);
+  const [past, running, live] = await Promise.all([pastSessions(dir, 8), runningSessions(cwd), resuming ? [] : liveSessions()]);
   const items = pickerItems({ live, running, past, known, now: Date.now() });
   if (items.length === 1) return items[0]!.choice;
   await showIfJob();
-  return pick(renderer, "Claude", cwd, items.map((item) => ({ label: item.label, detail: item.detail, value: item.choice })));
+  return pick(renderer, "Claude", cwd, items.map((item) => ({ label: item.label, detail: item.detail, value: item.choice })), resuming ? "go back" : "quit");
 }
 
 async function liveSessions(): Promise<LiveSession[]> {
