@@ -31,6 +31,12 @@ mkdir -p ~/.local/bin   # or any directory on your PATH
 ln -s "$(brew --prefix util-linux)/bin/setsid" ~/.local/bin/setsid
 ```
 
+komux uses OSC52 escape sequences to copy to clipboard. The terminal application bundled with macOS does not support OSC52 sequences. Run with a modern terminal emulator instead to resolve, e.g.:
+
+```bash
+brew install iterm2
+```
+
 ## Usage
 
 ```bash
