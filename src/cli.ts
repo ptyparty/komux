@@ -2,7 +2,7 @@
 import { constants } from "node:os";
 import { parseArgs } from "node:util";
 import { z } from "zod";
-import { AlreadyAnsweredError, answer, ask, reopen } from "./ask/ask.ts";
+import { AlreadyAnsweredError, answer, ask, askOwner, reopen } from "./ask/ask.ts";
 import { HostLaunchError, hostNames, type HostName } from "./ask/hosts.ts";
 import { AskStore, UnknownAskError } from "./ask/store.ts";
 import { UnsafeDirectoryError } from "./private-dir.ts";
@@ -56,7 +56,7 @@ Usage:
       Print the TypeScript declarations of what a script can use.
   komux ask [spec.json|-] [--wait] [--timeout SECONDS] [--host auto|komux|zellij|tmux|none]
       Open a form for the user and print {"id", "host", "message", "status", ...}.
-      With --wait, block until the user answers (or the timeout passes).
+      With --wait, block until the user answers (or the timeout passes); killing it withdraws the form.
   komux wait ID [--timeout SECONDS]
       Print the ask's result, waiting for it if necessary. Without --timeout, waits forever.
   komux open ID [--host ...]
@@ -155,8 +155,19 @@ async function askCommand(args: string[]): Promise<void> {
   });
   const spec = await readSpec(positionals[0] ?? "-");
   const waitMs = values.wait ? timeoutMs(values.timeout) : 0;
-  const outcome = await ask(new AskStore(), spec, hostOption(values.host), waitMs);
+  const withdraw = new AbortController();
+  let caught: "SIGTERM" | "SIGINT" | "SIGHUP" | undefined;
+  if (values.wait) {
+    for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+      process.on(signal, () => {
+        caught = signal;
+        withdraw.abort();
+      });
+    }
+  }
+  const outcome = await ask(new AskStore(), spec, hostOption(values.host), waitMs, { owner: askOwner(process.env), signal: withdraw.signal });
   print({ id: outcome.id, host: outcome.launch.host, message: outcome.launch.message, ...outcome.status });
+  if (caught) process.exit(128 + constants.signals[caught]);
 }
 
 async function waitCommand(args: string[]): Promise<void> {
