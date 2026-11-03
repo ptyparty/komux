@@ -12,7 +12,8 @@ describe("native Claude activity", () => {
 
 describe("composing with context", () => {
   test("puts the attached context ahead of the message", () => {
-    expect(withContext(undefined, "hello")).toBe("hello");
-    expect(withContext("Comment on plan.md, line 3:\n> - [ ] Ship it\n\n", "Not yet")).toBe("Comment on plan.md, line 3:\n> - [ ] Ship it\n\nNot yet");
+    expect(withContext([], "hello")).toBe("hello");
+    expect(withContext([{ label: "plan.md:3", text: "Comment on plan.md, line 3:\n> - [ ] Ship it\n\n" }], "Not yet")).toBe("Comment on plan.md, line 3:\n> - [ ] Ship it\n\nNot yet");
+    expect(withContext([{ label: "a", text: "First" }, { label: "b", text: "Second\n" }], "Both")).toBe("First\n\nSecond\n\nBoth");
   });
 });

@@ -61,6 +61,11 @@ class FakeHost implements PaneHost {
     this.composed.push(target);
     return undefined;
   }
+  contextAsked: [number, number[]][] = [];
+  contextClaude(near: number, candidates: number[]): string | undefined {
+    this.contextAsked.push([near, candidates]);
+    return this.claudes.size === 0 ? "No native Claude in this tab" : undefined;
+  }
   closedTabs: number[] = [];
   tabClosed(tabId: number): void {
     this.closedTabs.push(tabId);
@@ -1749,6 +1754,24 @@ describe("Workspace", () => {
     press(workspace, "alt+c");
     expect(host.composed).toEqual([1, 2]);
     expect(workspace.focused).toBe(2);
+  });
+
+  test("Alt shift c asks the focused pane for context", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    press(workspace, "alt+shift+c");
+    expect(workspace.message).toBe("No native Claude in this tab");
+    press(workspace, "ctrl+p", "r");
+    host.claudes.add(1);
+    press(workspace, "alt+shift+c");
+    press(workspace, "alt+shift+C");
+    expect(host.contextAsked).toEqual([
+      [1, [1]],
+      [2, [1, 2]],
+      [2, [1, 2]],
+    ]);
+    expect(workspace.message).toBeUndefined();
+    expect(host.composed).toEqual([]);
   });
 
   test("Ctrl+s reaches an ask popup, so forms can submit, but opens jobs mode over a job", () => {

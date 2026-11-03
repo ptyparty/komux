@@ -58,7 +58,8 @@ export interface PaneHost {
   untrackJob(id: PaneId): void;
   runningCommand(id: PaneId): string | undefined;
   shellCommand(text: string): string[];
-  composeClaude(near: PaneId, candidates: PaneId[], context?: ComposeContext): string | undefined;
+  composeClaude(near: PaneId, candidates: PaneId[], context?: ComposeContext[]): string | undefined;
+  contextClaude(near: PaneId, candidates: PaneId[]): string | undefined;
   peekReply(near: PaneId, title: string, text: string, key: string): void;
   pickReply(near: PaneId, title: string, choices: ReplyChoice[], key: string): void;
   tabClosed(tabId: number): void;
@@ -85,6 +86,7 @@ export class Workspace {
   mode: Mode = "normal";
   prompt: Prompt | undefined;
   message: string | undefined;
+  picking: string | undefined;
   quit = false;
   detachRequested = false;
   clients = 1;
@@ -951,6 +953,9 @@ export class Workspace {
       }
       case "compose-claude":
         this.message = this.host.composeClaude(this.focused, this.tabPanes(this.tab));
+        return;
+      case "context-claude":
+        this.message = this.host.contextClaude(this.focused, this.tabPanes(this.tab));
         return;
       case "last-tab": {
         const index = this.tabs.findIndex((tab) => tab.id === this.previousTabId);

@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, TextRenderable, createCliRenderer, type CliRenderer, type KeyEvent } from "@opentui/core";
+import { BoxRenderable, TextareaRenderable, TextRenderable, bg, createCliRenderer, fg, type CliRenderer, type KeyEvent, type StyledText } from "@opentui/core";
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { ControlError, sendControl } from "../mux/control.ts";
@@ -16,6 +16,8 @@ import { leaveCommand, parseCommands, type Leave, type SlashCommand } from "./co
 import { freshArgs } from "./options.ts";
 import { SlashCompletion } from "./completion.ts";
 import { deliver } from "./inbox.ts";
+import type { Attachment } from "../mux/context.ts";
+import { styled } from "../ui/styled.ts";
 
 export async function runClaude(args: string[], options: { pick: boolean }): Promise<void> {
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
@@ -381,30 +383,39 @@ async function openInbox(
   return { stop, awaken: async () => void (await register(path)), nextWake, forgetWake: () => (wake = undefined) };
 }
 
-export async function runCompose(socket: string, name: string, attachment?: { file: string; label: string }): Promise<void> {
-  const context = attachment ? await readAttachment(attachment.file) : undefined;
+export async function runCompose(socket: string, name: string, source?: { file: string; label?: string }): Promise<void> {
+  const attachments = source ? await readAttachments(source) : [];
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
-  const text = await composeMessage(renderer, name, () => fetchInbox(socket), () => askInbox(socket, { cycleMode: true }), attachment?.label);
+  const message = await composeMessage(renderer, name, () => fetchInbox(socket), () => askInbox(socket, { cycleMode: true }), attachments);
   renderer.destroy();
   await renderer.closed;
-  if (text) await deliver(socket, withContext(context, text));
+  if (message) await deliver(socket, withContext(message.attachments, message.text));
 }
 
-async function readAttachment(file: string): Promise<string> {
+async function readAttachments(source: { file: string; label?: string }): Promise<Attachment[]> {
   try {
-    return await Bun.file(file).text();
+    const text = await Bun.file(source.file).text();
+    if (source.label !== undefined) return [{ label: source.label, text }];
+    const parsed = JSON.parse(text) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((item): item is Attachment => typeof item?.label === "string" && typeof item?.text === "string") : [];
   } finally {
-    rmSync(file, { force: true });
+    rmSync(source.file, { force: true });
   }
 }
 
-export function withContext(context: string | undefined, text: string): string {
-  return context === undefined ? text : `${context.trimEnd()}\n\n${text}`;
+export function withContext(attachments: Attachment[], text: string): string {
+  return [...attachments.map((attachment) => attachment.text.trimEnd()), text].join("\n\n");
 }
 
 type InboxInfo = { commands: SlashCommand[]; mode?: string };
 
-function composeMessage(renderer: CliRenderer, name: string, load: () => Promise<InboxInfo>, cycleMode: () => Promise<InboxInfo>, label?: string): Promise<string | undefined> {
+function composeMessage(
+  renderer: CliRenderer,
+  name: string,
+  load: () => Promise<InboxInfo>,
+  cycleMode: () => Promise<InboxInfo>,
+  attached: Attachment[],
+): Promise<{ text: string; attachments: Attachment[] } | undefined> {
   return new Promise((resolve) => {
     let commands: SlashCommand[] = [];
     let loading: Promise<void> | undefined;
@@ -420,8 +431,13 @@ function composeMessage(renderer: CliRenderer, name: string, load: () => Promise
     const box = new BoxRenderable(renderer, { width: "100%", height: "100%", flexDirection: "column", backgroundColor: theme.background, paddingLeft: 1, paddingRight: 1 });
     const header = new TextRenderable(renderer, { content: title(), fg: theme.muted, height: 1, flexShrink: 0 });
     box.add(header);
-    if (label) box.add(new TextRenderable(renderer, { content: ` ${label} `, fg: theme.background, bg: theme.accent, height: 1, flexShrink: 0, wrapMode: "none" }));
-    const send = () => resolve(input.plainText.trim() || undefined);
+    const attachments = [...attached];
+    const chips = new TextRenderable(renderer, { content: chipText(attachments), flexShrink: 0, wrapMode: "word" });
+    if (attachments.length > 0) box.add(chips);
+    const send = () => {
+      const text = input.plainText.trim();
+      resolve(text ? { text, attachments } : undefined);
+    };
     const input: TextareaRenderable = new TextareaRenderable(renderer, {
       flexGrow: 1,
       wrapMode: "word",
@@ -446,10 +462,19 @@ function composeMessage(renderer: CliRenderer, name: string, load: () => Promise
         void cycleMode().then((found) => {
           if (found.mode) header.content = title(found.mode);
         });
+      } else if (key.name === "backspace" && input.plainText === "" && attachments.length > 0) {
+        key.preventDefault();
+        attachments.pop();
+        if (attachments.length === 0) box.remove(chips);
+        else chips.content = chipText(attachments);
       } else if (completion.handleKey(key)) key.preventDefault();
       else if (key.name === "escape") resolve(undefined);
     });
   });
+}
+
+function chipText(attachments: Attachment[]): StyledText {
+  return styled(attachments.flatMap((attachment, index) => [...(index > 0 ? [" "] : []), bg(theme.accent)(fg(theme.background)(` ${attachment.label} `))]));
 }
 
 function fetchInbox(socket: string): Promise<InboxInfo> {

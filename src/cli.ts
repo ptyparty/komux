@@ -451,12 +451,13 @@ async function claudeCommand(args: string[]): Promise<void> {
       name: { type: "string" },
       "from-stdin": { type: "boolean" },
       "context-file": { type: "string" },
+      attachments: { type: "string" },
       label: { type: "string" },
     });
     if (values["from-stdin"]) return composeFromStdin(values.label);
     if (!values.socket) throw new UsageError("missing --socket");
-    const context = values["context-file"] ? { file: values["context-file"], label: values.label ?? "context" } : undefined;
-    return runCompose(values.socket, values.name ?? "Claude", context);
+    const attachments = values.attachments ? { file: values.attachments } : values["context-file"] ? { file: values["context-file"], label: values.label ?? "context" } : undefined;
+    return runCompose(values.socket, values.name ?? "Claude", attachments);
   }
   const { values, positionals } = parse(args, { resume: { type: "string" }, continue: { type: "boolean" }, mode: { type: "string" } });
   if (values.resume && values.continue) throw new UsageError("pick one of --resume and --continue");
