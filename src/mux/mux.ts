@@ -54,6 +54,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
 
   let popupTimer: Timer | undefined;
   let toastTimer: Timer | undefined;
+  let wakeupTimer: Timer | undefined;
   const runningCommands = new Map<PaneId, { started: number; timer: Timer; commandLine: string }>();
   const jobLogs = new Map<PaneId, { fd: number; path: string }>();
   const nativeClaudes = new Map<PaneId, string>();
@@ -103,6 +104,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
       workspace.detachRequested = false;
       options.onDetach();
     }
+    workspace.showLongWakeups();
     view?.render();
     syncPixelSize();
     const wait = workspace.popupWaitMs();
@@ -111,6 +113,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     const expiry = workspace.nextToastExpiry();
     clearTimeout(toastTimer);
     if (expiry !== undefined) toastTimer = setTimeout(refresh, expiry + 20);
+    const wakeup = workspace.nextWakeupShown();
+    clearTimeout(wakeupTimer);
+    if (wakeup !== undefined) wakeupTimer = setTimeout(refresh, wakeup + 20);
   };
 
   const jobTails = new Map<PaneId, LineTail>();
@@ -365,6 +370,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     tray.stop();
     clearTimeout(popupTimer);
     clearTimeout(toastTimer);
+    clearTimeout(wakeupTimer);
     clearTimeout(dockTimer);
     for (const running of runningCommands.values()) clearTimeout(running.timer);
     renderer.keyInput.off("keypress", onKey);
