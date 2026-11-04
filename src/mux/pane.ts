@@ -1,7 +1,7 @@
 import { BoxRenderable, EmbeddedTerminalRenderable, type CliRenderer, type MouseEvent } from "@opentui/core";
-import { readlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename } from "node:path";
+import { processCwd } from "./process-cwd.ts";
 import { GraphicsScanner, type GraphicsCommand } from "./graphics.ts";
 import type { PaneId } from "./layout.ts";
 import { Pty, type ReadScheduler } from "./pty.ts";
@@ -103,11 +103,7 @@ export class Pane {
   }
 
   cwd(): string | undefined {
-    try {
-      return readlinkSync(`/proc/${this.pty.child.pid}/cwd`);
-    } catch {
-      return this.options.cwd;
-    }
+    return processCwd(this.pty.child.pid) ?? this.options.cwd;
   }
 
   label(name: string | undefined): string {
