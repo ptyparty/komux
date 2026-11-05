@@ -2,12 +2,13 @@ import { BoxRenderable, TextRenderable, bg, bold, fg, type CliRenderer } from "@
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { styled, type Part } from "../ui/styled.ts";
-import { theme } from "./theme.ts";
+import { card, theme } from "./theme.ts";
 import type { Project } from "./projects.ts";
 import type { Prompt } from "./workspace.ts";
 
 export class Launcher {
   private readonly box: BoxRenderable;
+  private readonly title: TextRenderable;
   private readonly detail: TextRenderable;
   private readonly input: TextRenderable;
   private readonly matches: TextRenderable;
@@ -23,21 +24,19 @@ export class Launcher {
       width: "60%",
       zIndex: 200,
       visible: false,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: theme.accent,
-      titleColor: theme.accent,
-      backgroundColor: theme.surface,
+      ...card(theme.accent),
       flexDirection: "column",
       paddingLeft: 1,
       paddingRight: 1,
+      paddingBottom: 1,
     });
+    this.title = new TextRenderable(renderer, { height: 1, wrapMode: "none" });
     this.detail = new TextRenderable(renderer, { fg: theme.muted });
     this.input = new TextRenderable(renderer, {});
     this.matches = new TextRenderable(renderer, { marginTop: 1, wrapMode: "none" });
     this.marked = new TextRenderable(renderer, { marginTop: 1, wrapMode: "none" });
     this.footer = new TextRenderable(renderer, { fg: theme.muted, marginTop: 1 });
-    for (const child of [this.detail, this.input, this.matches, this.marked, this.footer]) this.box.add(child);
+    for (const child of [this.title, this.detail, this.input, this.matches, this.marked, this.footer]) this.box.add(child);
     renderer.root.add(this.box);
   }
 
@@ -47,7 +46,7 @@ export class Launcher {
       this.firstShown = 0;
       return;
     }
-    this.box.title = ` ${prompt.title} `;
+    this.title.content = styled([bold(fg(theme.text)(prompt.title))]);
     this.detail.visible = prompt.detail !== undefined;
     this.detail.content = prompt.detail ?? "";
     this.input.content = styled([bold(fg(theme.accent)("› ")), fg(theme.text)(prompt.text), bg(theme.text)(" ")]);
@@ -60,7 +59,20 @@ export class Launcher {
     if (matches) this.matches.content = shown.length > 0 ? styled(matchLines(prompt, shown, this.firstShown)) : styled([fg(theme.muted)("No matching projects")]);
     this.marked.visible = marked.length > 0;
     if (marked.length > 0) this.marked.content = styled(markedLines(marked));
-    this.footer.content = matches ? `↑↓ select · Space mark · Tab complete · Enter open${marked.length > 0 ? ` ${marked.length}` : ""} · Alt+Enter without jobs · Esc cancel` : "Enter confirm · Esc cancel";
+    const keys: [string, string][] = matches
+      ? [
+          ["↑↓", "select"],
+          ["Space", "mark"],
+          ["Tab", "complete"],
+          ["Enter", `open${marked.length > 0 ? ` ${marked.length}` : ""}`],
+          ["Alt+Enter", "without jobs"],
+          ["Esc", "cancel"],
+        ]
+      : [
+          ["Enter", "confirm"],
+          ["Esc", "cancel"],
+        ];
+    this.footer.content = styled(keys.flatMap(([key, label], index) => [...(index > 0 ? ["  "] : []), fg(theme.text)(key), fg(theme.muted)(` ${label}`)]));
     const matchRows = matches ? Math.max(shown.length, 1) + 1 : 0;
     this.box.height = 2 + (prompt.detail ? 1 : 0) + 1 + matchRows + markedRows + 2;
   }

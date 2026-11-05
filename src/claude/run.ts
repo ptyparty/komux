@@ -419,7 +419,7 @@ function composeMessage(
   return new Promise((resolve) => {
     let commands: SlashCommand[] = [];
     let loading: Promise<void> | undefined;
-    const title = (mode?: string) => `To ${name}${mode ? ` (${mode} mode)` : ""} · / commands · Enter send · Alt+Enter newline · Shift+Tab mode · Esc cancel`;
+    const title = (mode?: string) => composeFooter(mode);
     const fetch = () => {
       loading ??= load().then((found) => {
         commands = found.commands;
@@ -428,11 +428,10 @@ function composeMessage(
         completion.update();
       });
     };
-    const box = new BoxRenderable(renderer, { width: "100%", height: "100%", flexDirection: "column", backgroundColor: theme.background, paddingLeft: 1, paddingRight: 1 });
-    const header = new TextRenderable(renderer, { content: title(), fg: theme.muted, height: 1, flexShrink: 0 });
-    box.add(header);
+    const box = new BoxRenderable(renderer, { width: "100%", height: "100%", flexDirection: "column", backgroundColor: theme.raised, paddingRight: 1, paddingTop: 1 });
+    const header = new TextRenderable(renderer, { content: title(), height: 1, flexShrink: 0, wrapMode: "none" });
     const attachments = [...attached];
-    const chips = new TextRenderable(renderer, { content: chipText(attachments), flexShrink: 0, wrapMode: "word" });
+    const chips = new TextRenderable(renderer, { content: chipText(attachments), flexShrink: 0, wrapMode: "word", marginBottom: 1 });
     if (attachments.length > 0) box.add(chips);
     const send = () => {
       const text = input.plainText.trim();
@@ -441,6 +440,8 @@ function composeMessage(
     const input: TextareaRenderable = new TextareaRenderable(renderer, {
       flexGrow: 1,
       wrapMode: "word",
+      placeholder: `Message ${name}`,
+      placeholderColor: theme.faint,
       textColor: theme.text,
       focusedTextColor: theme.text,
       keyBindings: composeKeyBindings,
@@ -453,6 +454,7 @@ function composeMessage(
     const completion = new SlashCompletion(renderer, input, { commands: () => commands, submit: send, quit: false });
     box.add(completion.list);
     box.add(input);
+    box.add(header);
     renderer.root.add(box);
     input.focus();
     fetch();
@@ -474,7 +476,20 @@ function composeMessage(
 }
 
 function chipText(attachments: Attachment[]): StyledText {
-  return styled(attachments.flatMap((attachment, index) => [...(index > 0 ? [" "] : []), bg(theme.accent)(fg(theme.background)(` ${attachment.label} `))]));
+  return styled(attachments.flatMap((attachment, index) => [...(index > 0 ? ["  "] : []), bg(theme.surface2)(fg(theme.accent)(` ⌗ ${attachment.label} `))]));
+}
+
+const composeHints: [string, string][] = [
+  ["/", "commands"],
+  ["⏎", "send"],
+  ["Alt ⏎", "newline"],
+  ["⇧Tab", "mode"],
+  ["Esc", "cancel"],
+];
+
+function composeFooter(mode: string | undefined): StyledText {
+  const hints = composeHints.flatMap(([key, label], index) => [...(index > 0 ? ["  "] : []), fg(theme.text)(key), fg(theme.muted)(` ${label}`)]);
+  return styled([...(mode ? [fg(theme.accent)(`${mode} mode`), "    "] : []), ...hints]);
 }
 
 function fetchInbox(socket: string): Promise<InboxInfo> {

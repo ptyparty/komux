@@ -17,6 +17,7 @@ import { LineTail } from "./tail.ts";
 import { refuseAgentCommand } from "./agent-jobs.ts";
 import { deliver } from "../claude/inbox.ts";
 import { bracketedPaste, peekSpec, promptRoute } from "./peek.ts";
+import { theme } from "./theme.ts";
 import { Tray, trayWidgets } from "./tray.ts";
 import { MuxView } from "./view.ts";
 import { Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
@@ -44,6 +45,7 @@ export type Mux = {
 };
 
 export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
+  renderer.setBackgroundColor(theme.background);
   const scheduler = new ReadScheduler(readBudgetMs, readWindowMs);
   const panes = new Map<PaneId, Pane>();
   const graphics = options.graphics;
@@ -188,6 +190,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     if (job) env.KOMUX_JOB = String(id);
     panes.set(id, new Pane(renderer, id, { cwd, command, env, holdOnExit, holdOnFailure, frameless, job, scrollbackBytes }, scheduler, {
       onHeld: () => refresh(),
+      onTitle: () => refreshDock(),
       onCommand: frameless || holdOnFailure ? undefined : commandEvent,
       onClipboard: (_, text) => copyToClipboard(text),
       onGraphics: (paneId, command) => graphics.forward(paneId, command),

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ClipboardScanner, FocusModeScanner, programOf } from "./pane.ts";
+import { ClipboardScanner, FocusModeScanner, TitleScanner, programOf } from "./pane.ts";
 
 describe("programOf", () => {
   test("names the program from a shell's command line", () => {
@@ -64,5 +64,31 @@ describe("ClipboardScanner", () => {
     const scanner = new ClipboardScanner();
     expect(scanner.scan(bytes(`${write("once")}\x07`))).toEqual(["once"]);
     expect(scanner.scan(bytes("more output"))).toEqual([]);
+  });
+});
+
+describe("TitleScanner", () => {
+  const bytes = (text: string) => Buffer.from(text, "utf8");
+
+  test("reads the title a program sets with OSC 0 or 2", () => {
+    const scanner = new TitleScanner();
+    expect(scanner.scan(bytes("hi\x1b]0;checkout-service › index.md\x07there"))).toBe("checkout-service › index.md");
+    expect(scanner.scan(bytes("\x1b]2;shop › local\x1b\\"))).toBe("shop › local");
+    expect(scanner.scan(bytes("\x1b]52;c;aGk=\x07plain output"))).toBeUndefined();
+  });
+
+  test("keeps the last title in a chunk", () => {
+    expect(new TitleScanner().scan(bytes("\x1b]2;first\x07\x1b]2;second\x07"))).toBe("second");
+  });
+
+  test("reads a title split across chunks", () => {
+    const scanner = new TitleScanner();
+    expect(scanner.scan(bytes("output\x1b"))).toBeUndefined();
+    expect(scanner.scan(bytes("]2;uncommit"))).toBeUndefined();
+    expect(scanner.scan(bytes("ted › src/coupons.ts\x07"))).toBe("uncommitted › src/coupons.ts");
+  });
+
+  test("reports a cleared title as empty", () => {
+    expect(new TitleScanner().scan(bytes("\x1b]0;\x07"))).toBe("");
   });
 });

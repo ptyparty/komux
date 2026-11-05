@@ -8,12 +8,12 @@ import {
   TextareaRenderable,
   TextRenderable,
   bold,
-  dim,
   fg,
   type CliRenderer,
   type KeyEvent,
   type TextChunk,
 } from "@opentui/core";
+import { theme } from "../mux/theme.ts";
 import { styled, type Part } from "../ui/styled.ts";
 import { FormController, takesNotes, type FormResult, type Focusable } from "./controller.ts";
 import { isEditing, keyHints, keyToAction, type EditorPosition } from "./keys.ts";
@@ -21,11 +21,10 @@ import { fitImage, imageIdColor, newImageId, placeholderLines, readImage, termin
 import type { ChoiceElement, ConfirmElement, Element, ImageElement, NumberElement, SlidesElement, TextElement } from "./schema.ts";
 
 const palette = {
-  accent: "#7e9cd8",
-  muted: "#727169",
-  error: "#e82424",
-  selected: "#98bb6c",
-  border: "#54546d",
+  accent: theme.accent,
+  muted: theme.muted,
+  error: theme.error,
+  selected: theme.ok,
 };
 
 type Editor = InputRenderable | TextareaRenderable;
@@ -58,17 +57,14 @@ class FormView {
     private readonly resolve: (result: FormResult) => void,
   ) {
     const frame = new BoxRenderable(renderer, {
-      border: true,
-      borderStyle: "rounded",
-      borderColor: palette.border,
-      title: ` ${controller.spec.title} `,
-      titleColor: palette.accent,
+      backgroundColor: theme.raised,
       flexDirection: "column",
       width: "100%",
       height: "100%",
       paddingLeft: 1,
       paddingRight: 1,
     });
+    frame.add(new TextRenderable(renderer, { content: styled([bold(fg(theme.text)(controller.spec.title))]), height: 1, flexShrink: 0, wrapMode: "none", marginBottom: 1 }));
     this.scroll = new ScrollBoxRenderable(renderer, { flexGrow: 1, contentOptions: { flexDirection: "column", gap: 1 } });
     if (controller.spec.description) {
       this.scroll.add(new TextRenderable(renderer, { content: controller.spec.description, fg: palette.muted }));
@@ -138,7 +134,7 @@ class FormView {
   private syncSubmit(): void {
     const label = ` ${this.controller.spec.submitLabel ?? "Submit"} `;
     const focused = this.controller.focused().kind === "submit";
-    this.submit.content = styled([focused ? bold(fg("#1f1f28")(label)) : fg(palette.accent)(`[${label}]`)]);
+    this.submit.content = styled([focused ? bold(fg(theme.background)(label)) : fg(palette.accent)(`[${label}]`)]);
     this.submit.bg = focused ? palette.accent : undefined;
   }
 
@@ -203,8 +199,8 @@ function renderHints(focused: Focusable, overflows: boolean): StyledText {
   const chunks: Part[] = [];
   const scrolling = overflows ? [{ keys: "PgUp/PgDn", action: "scroll" }] : [];
   [...keyHints(focused), ...scrolling].forEach((hint, index) => {
-    if (index > 0) chunks.push(dim("  ·  "));
-    chunks.push(bold(fg(palette.accent)(hint.keys)), fg(palette.muted)(` ${hint.action}`));
+    if (index > 0) chunks.push("  ");
+    chunks.push(fg(theme.text)(hint.keys), fg(palette.muted)(` ${hint.action}`));
   });
   return styled(chunks);
 }
@@ -320,7 +316,7 @@ class SlidesView implements ElementView {
       this.note = new InputRenderable(renderer, {
         placeholder: "Note on this slide (optional)",
         marginLeft: 2,
-        focusedBackgroundColor: "#2a2a37",
+        focusedBackgroundColor: theme.surface2,
         onContentChange: () => {
           if (this.note!.plainText === this.currentNote()) return;
           controller.dispatch({ type: "setNote", id: element.id, value: this.note!.plainText });
@@ -395,27 +391,29 @@ export function markdownStyle(renderer: CliRenderer): SyntaxStyle {
       default: {},
       conceal: { fg: palette.muted },
       "markup.heading": { fg: palette.accent, bold: true },
-      "markup.heading.1": { fg: "#e6c384", bold: true, underline: true },
+      "markup.heading.1": { fg: theme.apps.quoll, bold: true, underline: true },
       "markup.heading.2": { fg: palette.accent, bold: true },
-      "markup.heading.3": { fg: "#957fb8", bold: true },
-      "markup.heading.4": { fg: "#957fb8" },
+      "markup.heading.3": { fg: theme.syntax.keyword, bold: true },
+      "markup.heading.4": { fg: theme.syntax.keyword },
       "markup.heading.5": { fg: palette.muted, bold: true },
       "markup.heading.6": { fg: palette.muted },
       "markup.strong": { bold: true },
       "markup.italic": { italic: true },
       "markup.strikethrough": { dim: true },
-      "markup.raw": { fg: "#e6c384" },
+      "markup.raw": { fg: theme.apps.quoll },
       "markup.link": { fg: palette.accent, underline: true },
       "markup.link.label": { fg: palette.accent },
       "markup.link.url": { fg: palette.muted, underline: true },
       "markup.list": { fg: palette.selected },
       "markup.quote": { fg: palette.muted, italic: true },
-      keyword: { fg: "#957fb8" },
-      string: { fg: "#98bb6c" },
-      comment: { fg: palette.muted, italic: true },
-      number: { fg: "#d27e99" },
-      function: { fg: "#7e9cd8" },
-      type: { fg: "#7aa89f" },
+      keyword: { fg: theme.syntax.keyword },
+      string: { fg: theme.syntax.string },
+      comment: { fg: theme.syntax.comment, italic: true },
+      number: { fg: theme.syntax.number },
+      function: { fg: theme.syntax.function },
+      type: { fg: theme.syntax.type },
+      operator: { fg: theme.syntax.operator },
+      punctuation: { fg: theme.syntax.punctuation },
     },
     renderer.nativeScene,
   );
@@ -479,7 +477,7 @@ class TextView extends InputView {
     const options = {
       placeholder: element.placeholder ?? "Type your answer",
       marginLeft: 2,
-      focusedBackgroundColor: "#2a2a37",
+      focusedBackgroundColor: theme.surface2,
       onContentChange: () => {
         controller.dispatch({ type: "setText", id: element.id, value: this.editor.plainText });
         changed();
@@ -561,7 +559,7 @@ class ChoiceView extends InputView {
     this.other = new InputRenderable(renderer, {
       placeholder: "Type your answer",
       marginLeft: 6,
-      focusedBackgroundColor: "#2a2a37",
+      focusedBackgroundColor: theme.surface2,
       onContentChange: () => {
         controller.dispatch({ type: "setOtherText", id: element.id, value: this.other.plainText });
         changed();

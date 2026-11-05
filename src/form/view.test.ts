@@ -54,7 +54,7 @@ describe("form view", () => {
     expect(frame).toContain("● Yes   ○ No");
     expect(frame).toContain("◀ 2 ▶   1–5");
     expect(frame).toContain("● dev");
-    expect(frame).toMatch(/○ prod\s*│\n│\s+careful/);
+    expect(frame).toMatch(/○ prod\s*\n\s+careful/);
     expect(frame).toContain("○ Other…");
     expect(frame).toContain("[ Submit ]");
     expect(frame).toContain("Enter next");
@@ -149,7 +149,7 @@ describe("form view", () => {
     expect(frame).not.toContain("**first**");
     expect(frame).toContain("first step");
     await setup.renderOnce();
-    expect(setup.captureCharFrame()).toContain("PgUp/PgDn scroll");
+    expect(setup.captureCharFrame()).toMatch(/PgUp\/\s*PgDn scroll/);
     setup.mockInput.pressKey("pagedown");
     setup.mockInput.pressKey("pagedown");
     await setup.renderOnce();
