@@ -368,6 +368,8 @@ export function showKey(name: string): string {
   return `${prefix}${shifted}`;
 }
 
+const selectionCommands = new Set<Command["type"]>(["select-job", "open-job", "hide-job", "rerun-job", "promote-job", "dock-job", "close-job", "select-widget", "open-widget"]);
+
 export type KomuxCommand = { name: string; keys: string; mode: Mode; binding: Binding };
 
 export function komuxCommands(scope?: Mode): KomuxCommand[] {
@@ -377,7 +379,7 @@ export function komuxCommands(scope?: Mode): KomuxCommand[] {
   const commands: KomuxCommand[] = [];
   for (const mode of modes) {
     for (const binding of keymap[mode].bindings) {
-      if (!binding.name) continue;
+      if (!binding.name || (!scope && selectionCommands.has(binding.command.type))) continue;
       const id = JSON.stringify(binding.command);
       if (seen.has(id)) continue;
       seen.add(id);

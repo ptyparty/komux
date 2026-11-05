@@ -8,7 +8,7 @@ import type { ControlRequest, ControlResponse } from "./control.ts";
 import type { GraphicsRelay } from "./graphics.ts";
 import { findProjects } from "./projects.ts";
 import { askContext, askKeys, contextSocketPath, noContext, type ContextRequest } from "./context.ts";
-import { ConversationTitles, loadRecentTabs, saveRecentTabs } from "./recent.ts";
+import { ConversationTitles, RecentTabs } from "./recent.ts";
 import { paneIds, type PaneId } from "./layout.ts";
 import { selfCommand } from "../ask/hosts.ts";
 import { Pane, type CommandEvent } from "./pane.ts";
@@ -234,6 +234,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   };
 
   let pendingContext: ContextRequest | undefined;
+  const recentTabs = new RecentTabs();
+  const keyless = new Set<string>();
 
   const host: PaneHost = {
     create: (id, cwd, command, tabId) => spawnPane(id, cwd, command, (exited) => workspace.paneExited(exited), { holdOnExit: true, tabId }),
@@ -330,15 +332,16 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     askKeys: (id) => {
       const tabId = workspace.tabOf(id)?.id;
       const path = tabId === undefined ? undefined : contextSocketPath(tabDirs.tabDir(tabId), id);
-      if (path === undefined || !existsSync(path)) return workspace.setAppKeys(id, undefined);
-      void askKeys(path).then((keys) => {
-        workspace.setAppKeys(id, keys);
+      if (path === undefined || !existsSync(path) || keyless.has(path)) return workspace.setAppKeys(id, undefined);
+      void askKeys(path).then((reply) => {
+        if (reply && "unsupported" in reply) keyless.add(path);
+        workspace.setAppKeys(id, reply && "keys" in reply ? reply.keys : undefined);
         refresh();
       });
     },
     sendKeys: (id, data) => panes.get(id)?.type(data),
-    recentTabs: () => loadRecentTabs(),
-    saveRecentTabs: (tabs) => saveRecentTabs(tabs),
+    recentTabs: () => recentTabs.list(),
+    rememberTab: (tab) => recentTabs.remember(tab),
   };
 
   const conversations = new ConversationTitles(() => refresh());
@@ -428,6 +431,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     stopped = true;
     clearInterval(titles);
     tray.stop();
+    recentTabs.flush();
     clearTimeout(popupTimer);
     clearTimeout(leaderTimer);
     clearTimeout(toastTimer);

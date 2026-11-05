@@ -12,6 +12,7 @@ const appRows = 5;
 export class KeysCard {
   private readonly box: BoxRenderable;
   private readonly text: TextRenderable;
+  private rows = 0;
 
   constructor(private readonly renderer: CliRenderer) {
     this.box = new BoxRenderable(renderer, { position: "absolute", left: 1, zIndex: 160, visible: false, ...card(theme.accent), paddingLeft: 1, paddingRight: 1 });
@@ -21,13 +22,14 @@ export class KeysCard {
   }
 
   get height(): number {
-    return this.box.visible && typeof this.box.height === "number" ? this.box.height : 0;
+    return this.rows;
   }
 
   render(state: { mode: Mode; leader: boolean; app?: AppKeys; bottom: number; lockLeader: boolean }): void {
     const room = this.renderer.width - 2;
     const lines = state.leader ? leaderLines(state.app, room - 3) : state.mode === "normal" || state.mode === "leader" ? undefined : modeLines(state.mode, room - 3, state.lockLeader);
     this.box.visible = lines !== undefined;
+    this.rows = lines?.length ?? 0;
     if (!lines) return;
     const width = Math.min(Math.max(...lines.map(lineWidth)) + 3, room);
     this.box.borderColor = theme.modes[state.mode];

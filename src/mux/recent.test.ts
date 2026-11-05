@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRecentTabs, saveRecentTabs } from "./recent.ts";
+import { RecentTabs, loadRecentTabs, saveRecentTabs } from "./recent.ts";
 
 const dirs: string[] = [];
 
@@ -30,5 +30,21 @@ describe("recent tabs", () => {
     expect(loadRecentTabs(path)).toEqual([]);
     writeFileSync(path, JSON.stringify([{ title: "ok", at: 1, project: { name: "ok", dir: "/ok" } }, { title: "bad", at: "x", project: {} }, 7]));
     expect(loadRecentTabs(path)).toEqual([{ title: "ok", at: 1, project: { name: "ok", dir: "/ok" } }]);
+  });
+});
+
+describe("RecentTabs", () => {
+  test("two sessions saving to the same file keep each other's tabs", () => {
+    const path = join(scratch(), "recent-tabs.json");
+    const first = new RecentTabs(path, 10_000);
+    const second = new RecentTabs(path, 10_000);
+    first.remember({ title: "merlot", project: { name: "merlot", dir: "/w/merlot" }, at: 1 });
+    second.remember({ title: "penny", project: { name: "penny", dir: "/w/penny" }, at: 2 });
+    expect(loadRecentTabs(path)).toEqual([]);
+    first.flush();
+    second.flush();
+    first.remember({ title: "api", project: { name: "merlot", dir: "/w/merlot" }, at: 3 });
+    first.flush();
+    expect(loadRecentTabs(path).map((tab) => tab.title)).toEqual(["api", "penny"]);
   });
 });

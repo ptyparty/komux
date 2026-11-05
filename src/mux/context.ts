@@ -94,17 +94,23 @@ export type AppCommand = { label: string; keys?: string; send?: string };
 export type AppGroup = { name: string; commands: AppCommand[] };
 export type AppKeys = { app: string; groups: AppGroup[] };
 
-export function askKeys(path: string, timeoutMs = 300): Promise<AppKeys | undefined> {
+export type KeysReply = { keys: AppKeys } | { unsupported: true } | undefined;
+
+export function askKeys(path: string, timeoutMs = 300): Promise<KeysReply> {
   return new Promise((resolve) => {
     let finished = false;
     let connection: { end(data?: string): void } | undefined;
     let buffer = "";
-    const finish = (keys: AppKeys | undefined) => {
+    const finish = (reply: KeysReply) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
-      connection?.end(keys ? undefined : `${JSON.stringify({ cancel: true })}\n`);
-      resolve(keys);
+      connection?.end(reply && "keys" in reply ? undefined : `${JSON.stringify({ cancel: true })}\n`);
+      resolve(reply);
+    };
+    const answer = (line: string): KeysReply => {
+      const keys = parseKeys(line);
+      return keys ? { keys } : { unsupported: true };
     };
     const timer = setTimeout(() => finish(undefined), timeoutMs);
     Bun.connect({
@@ -118,12 +124,15 @@ export function askKeys(path: string, timeoutMs = 300): Promise<AppKeys | undefi
         data(_socket, data) {
           buffer += data.toString();
           const newline = buffer.indexOf("\n");
-          if (newline >= 0) finish(parseKeys(buffer.slice(0, newline)));
+          if (newline >= 0) finish(answer(buffer.slice(0, newline)));
         },
-        close: () => finish(parseKeys(buffer)),
+        close: () => finish(answer(buffer)),
         error: () => finish(undefined),
       },
-    }).catch(() => finish(undefined));
+    }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ECONNREFUSED") rmSync(path, { force: true });
+      finish(undefined);
+    });
   });
 }
 
@@ -150,5 +159,5 @@ export function parseKeys(line: string): AppKeys | undefined {
     });
     return valid.length > 0 ? [{ name, commands: valid }] : [];
   });
-  return parsed.length > 0 ? { app, groups: parsed } : undefined;
+  return { app, groups: parsed };
 }

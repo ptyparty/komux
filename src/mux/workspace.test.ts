@@ -3,7 +3,7 @@ import { paneIds } from "./layout.ts";
 import { configSchema } from "./config.ts";
 import type { ReplyChoice } from "./peek.ts";
 import type { Project } from "./projects.ts";
-import { Workspace, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
+import { Workspace, openedKey, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
 
 class FakeHost implements PaneHost {
   created: [number, string | undefined][] = [];
@@ -123,8 +123,8 @@ class FakeHost implements PaneHost {
   recentTabs(): RecentTab[] {
     return this.recent;
   }
-  saveRecentTabs(tabs: RecentTab[]): void {
-    this.recent = tabs;
+  rememberTab(tab: RecentTab): void {
+    this.recent = [tab, ...this.recent.filter((kept) => openedKey(kept) !== openedKey(tab))];
   }
 }
 
@@ -2001,5 +2001,61 @@ describe("command palette", () => {
     const workspace = new Workspace(new FakeHost());
     workspace.setAppKeys(7, { app: "remax", groups: [{ name: "Review", commands: [{ label: "x" }] }] });
     expect(workspace.focusedApp()).toBeUndefined();
+  });
+});
+
+describe("review fixes", () => {
+  test("a failed view popup still closes on the next key while locked", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    press(workspace, "ctrl+space", "l");
+    const popup = workspace.reservePaneId();
+    workspace.openViewPopup(popup, "build", 1);
+    host.held.add(popup);
+    expect(press(workspace, "x")).toEqual([true]);
+    expect([workspace.popup, workspace.mode]).toEqual([undefined, "locked"]);
+  });
+
+  test("a renamed tab isn't listed as closed under its old name", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    workspace.openProject("merlot");
+    press(workspace, "ctrl+space", "t", "r");
+    press(workspace, "backspace", "backspace", "backspace", "backspace", "backspace", "backspace");
+    type(workspace, "api");
+    press(workspace, "return", "alt+1");
+    expect(host.recent.map((recent) => recent.title)).toEqual(["api"]);
+    expect(workspace.switchEntries().map((entry) => `${entry.kind} ${entry.name}`)).toEqual(["tab api", "project penny", "project penny-auth"]);
+  });
+
+  test("clicking the keys chip forgets a leader pressed while locked", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "l", "ctrl+space");
+    workspace.openLeader();
+    press(workspace, "l");
+    expect(workspace.mode).toBe("locked");
+    expect(press(workspace, "l")).toEqual([false]);
+    expect(workspace.mode).toBe("locked");
+  });
+
+  test("the global palette leaves out commands that act on the jobs and tray selection", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "?");
+    const names = workspace.palette!.entries.map((entry) => entry.name);
+    expect(names).not.toContain("close job");
+    expect(names).not.toContain("open widget");
+    expect(names).toContain("run a job");
+    press(workspace, "escape", "ctrl+space", "j", "?");
+    expect(workspace.palette!.entries.map((entry) => entry.name)).toContain("close job");
+  });
+
+  test("the selected palette row stays on its command when the app's commands arrive", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "?");
+    type(workspace, "new");
+    press(workspace, "down");
+    const selected = workspace.palette!.matches[workspace.palette!.selected]!.name;
+    workspace.setAppKeys(1, { app: "remax", groups: [{ name: "Notes", commands: [{ label: "new note", keys: "n", send: "n" }] }] });
+    expect(workspace.palette!.matches[workspace.palette!.selected]!.name).toBe(selected);
   });
 });

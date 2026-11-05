@@ -121,7 +121,7 @@ describe("askKeys", () => {
       write(answer);
       close();
     });
-    expect(await askKeys(path)).toEqual(answer.keys);
+    expect(await askKeys(path)).toEqual({ keys: answer.keys });
     expect(received).toEqual(['{"keys":1}']);
   });
 
@@ -132,9 +132,27 @@ describe("askKeys", () => {
     expect(await askKeys(socketPath(), 50)).toBeUndefined();
   });
 
+  test("cancels a program that took the request for a context request, and says it doesn't speak keys", async () => {
+    const path = socketPath();
+    const received = program(path, (line, write) => {
+      if (line.includes("keys")) write({ picking: "Pick a block, Esc cancels" });
+    });
+    expect(await askKeys(path)).toEqual({ unsupported: true });
+    await Bun.sleep(50);
+    expect(received).toEqual(['{"keys":1}', '{"cancel":true}']);
+  });
+
+  test("removes a stale socket nothing listens on", async () => {
+    const path = socketPath();
+    writeFileSync(path, "");
+    expect(await askKeys(path, 200)).toBeUndefined();
+    expect(existsSync(path)).toBe(false);
+  });
+
   test("drops malformed commands and empty groups", () => {
     const line = JSON.stringify({ keys: { app: "quoll", groups: [{ name: "Pages", commands: [{ label: "" }, { label: "links", keys: "f", send: "" }, 3] }, { name: "Empty", commands: [] }] } });
     expect(parseKeys(line)).toEqual({ app: "quoll", groups: [{ name: "Pages", commands: [{ label: "links", keys: "f" }] }] });
+    expect(parseKeys(JSON.stringify({ keys: { app: "quoll", groups: [] } }))).toEqual({ app: "quoll", groups: [] });
     expect(parseKeys('{"picking":"Pick a block"}')).toBeUndefined();
     expect(parseKeys("not json")).toBeUndefined();
   });
