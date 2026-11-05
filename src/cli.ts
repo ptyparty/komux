@@ -18,7 +18,7 @@ const usage = `komux: a terminal multiplexer agents can drive
 Usage:
   komux [attach [NAME]]
       Attach to session NAME (default "main"), starting it if it is not running.
-      Detach with Ctrl+o d; the session keeps running.
+      Detach with Ctrl Space d; the session keeps running.
   komux ls
       List running sessions.
   komux kill NAME

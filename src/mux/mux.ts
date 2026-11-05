@@ -7,7 +7,8 @@ import type { Config } from "./config.ts";
 import type { ControlRequest, ControlResponse } from "./control.ts";
 import type { GraphicsRelay } from "./graphics.ts";
 import { findProjects } from "./projects.ts";
-import { askContext, contextSocketPath, noContext, type ContextRequest } from "./context.ts";
+import { askContext, askKeys, contextSocketPath, noContext, type ContextRequest } from "./context.ts";
+import { ConversationTitles, loadRecentTabs, saveRecentTabs } from "./recent.ts";
 import { paneIds, type PaneId } from "./layout.ts";
 import { selfCommand } from "../ask/hosts.ts";
 import { Pane, type CommandEvent } from "./pane.ts";
@@ -56,6 +57,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   let pixelSize = "";
 
   let popupTimer: Timer | undefined;
+  let leaderTimer: Timer | undefined;
   let toastTimer: Timer | undefined;
   let wakeupTimer: Timer | undefined;
   const runningCommands = new Map<PaneId, { started: number; timer: Timer; commandLine: string }>();
@@ -116,6 +118,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     const expiry = workspace.nextToastExpiry();
     clearTimeout(toastTimer);
     if (expiry !== undefined) toastTimer = setTimeout(refresh, expiry + 20);
+    const leaderWait = workspace.leaderWaitMs();
+    clearTimeout(leaderTimer);
+    if (leaderWait !== undefined) leaderTimer = setTimeout(refresh, leaderWait + 10);
     const wakeup = workspace.nextWakeupShown();
     clearTimeout(wakeupTimer);
     if (wakeup !== undefined) wakeupTimer = setTimeout(refresh, wakeup + 20);
@@ -322,7 +327,21 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     screen: () => ({ cols: renderer.width, rows: renderer.height }),
     widgetCount: () => tray.widgets.length,
     openWidget: (index) => openWidget(index),
+    askKeys: (id) => {
+      const tabId = workspace.tabOf(id)?.id;
+      const path = tabId === undefined ? undefined : contextSocketPath(tabDirs.tabDir(tabId), id);
+      if (path === undefined || !existsSync(path)) return workspace.setAppKeys(id, undefined);
+      void askKeys(path).then((keys) => {
+        workspace.setAppKeys(id, keys);
+        refresh();
+      });
+    },
+    sendKeys: (id, data) => panes.get(id)?.type(data),
+    recentTabs: () => loadRecentTabs(),
+    saveRecentTabs: (tabs) => saveRecentTabs(tabs),
   };
+
+  const conversations = new ConversationTitles(() => refresh());
 
   const tray = new Tray(trayWidgets(options.config.tray), () => refresh());
 
@@ -342,6 +361,11 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
       refresh();
     },
     jobLine: (id) => jobTails.get(id)?.line,
+    conversationTitle: (dir) => conversations.title(dir),
+    onOpenKeys: () => {
+      workspace.openLeader();
+      refresh();
+    },
   });
   view.render();
 
@@ -405,6 +429,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     clearInterval(titles);
     tray.stop();
     clearTimeout(popupTimer);
+    clearTimeout(leaderTimer);
     clearTimeout(toastTimer);
     clearTimeout(wakeupTimer);
     clearTimeout(dockTimer);

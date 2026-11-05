@@ -25,6 +25,7 @@ export const theme = {
   },
   modes: {
     normal: komux,
+    leader: komux,
     pane: "#66c7c2",
     tab: "#b99cf0",
     session: "#e9b765",

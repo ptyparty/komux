@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { askContext, type ContextOutcome } from "./context.ts";
+import { askContext, askKeys, parseKeys, type ContextOutcome } from "./context.ts";
 
 const dirs: string[] = [];
 const servers: { stop(force?: boolean): void }[] = [];
@@ -109,5 +109,33 @@ describe("asking a pane for context", () => {
     expect(await request.outcome).toEqual({ cancelled: true });
     await Bun.sleep(30);
     expect(received).toEqual(['{"context":1}', '{"cancel":true}']);
+  });
+});
+
+describe("askKeys", () => {
+  const answer = { keys: { app: "remax", groups: [{ name: "Review", commands: [{ label: "accept hunk as reviewed", keys: "⏎", send: "\r" }] }] } };
+
+  test("sends a keys request and reads the app's groups", async () => {
+    const path = socketPath();
+    const received = program(path, (_line, write, close) => {
+      write(answer);
+      close();
+    });
+    expect(await askKeys(path)).toEqual(answer.keys);
+    expect(received).toEqual(['{"keys":1}']);
+  });
+
+  test("gives up quietly on a program that doesn't answer, or isn't listening", async () => {
+    const path = socketPath();
+    program(path, () => {});
+    expect(await askKeys(path, 50)).toBeUndefined();
+    expect(await askKeys(socketPath(), 50)).toBeUndefined();
+  });
+
+  test("drops malformed commands and empty groups", () => {
+    const line = JSON.stringify({ keys: { app: "quoll", groups: [{ name: "Pages", commands: [{ label: "" }, { label: "links", keys: "f", send: "" }, 3] }, { name: "Empty", commands: [] }] } });
+    expect(parseKeys(line)).toEqual({ app: "quoll", groups: [{ name: "Pages", commands: [{ label: "links", keys: "f" }] }] });
+    expect(parseKeys('{"picking":"Pick a block"}')).toBeUndefined();
+    expect(parseKeys("not json")).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@ import { busy, memoryUsed, readCpu, readMemory, systemMonitor, type CpuTimes } f
 
 export type TrayWidget = { name: string; every: number; render: () => string | Promise<string>; open?: string[] };
 
-const openCommand = z.array(z.string()).min(1).optional().describe("Command shown in a popup when the widget is clicked or selected with Ctrl+t w");
+const openCommand = z.array(z.string()).min(1).optional().describe("Command shown in a popup when the widget is clicked or selected with Ctrl Space w");
 
 export const trayEntry = z.union([
   z.object({ widget: z.literal("clock"), format: z.string().default("ddd HH:mm").describe("Tokens: dddd ddd YYYY MMM MM DD D HH mm ss"), open: openCommand }).strict(),

@@ -89,3 +89,66 @@ function isAttachment(value: unknown): value is Attachment {
   const { label, text } = value as Record<string, unknown>;
   return typeof label === "string" && label !== "" && typeof text === "string" && text.trim() !== "";
 }
+
+export type AppCommand = { label: string; keys?: string; send?: string };
+export type AppGroup = { name: string; commands: AppCommand[] };
+export type AppKeys = { app: string; groups: AppGroup[] };
+
+export function askKeys(path: string, timeoutMs = 300): Promise<AppKeys | undefined> {
+  return new Promise((resolve) => {
+    let finished = false;
+    let connection: { end(data?: string): void } | undefined;
+    let buffer = "";
+    const finish = (keys: AppKeys | undefined) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      connection?.end(keys ? undefined : `${JSON.stringify({ cancel: true })}\n`);
+      resolve(keys);
+    };
+    const timer = setTimeout(() => finish(undefined), timeoutMs);
+    Bun.connect({
+      unix: path,
+      socket: {
+        open(socket) {
+          if (finished) return void socket.end();
+          connection = socket;
+          socket.write(`${JSON.stringify({ keys: 1 })}\n`);
+        },
+        data(_socket, data) {
+          buffer += data.toString();
+          const newline = buffer.indexOf("\n");
+          if (newline >= 0) finish(parseKeys(buffer.slice(0, newline)));
+        },
+        close: () => finish(parseKeys(buffer)),
+        error: () => finish(undefined),
+      },
+    }).catch(() => finish(undefined));
+  });
+}
+
+export function parseKeys(line: string): AppKeys | undefined {
+  let reply: unknown;
+  try {
+    reply = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  const keys = typeof reply === "object" && reply !== null ? (reply as Record<string, unknown>).keys : undefined;
+  if (typeof keys !== "object" || keys === null) return undefined;
+  const { app, groups } = keys as Record<string, unknown>;
+  if (typeof app !== "string" || app === "" || !Array.isArray(groups)) return undefined;
+  const parsed = groups.flatMap((group): AppGroup[] => {
+    if (typeof group !== "object" || group === null) return [];
+    const { name, commands } = group as Record<string, unknown>;
+    if (typeof name !== "string" || !Array.isArray(commands)) return [];
+    const valid = commands.flatMap((command): AppCommand[] => {
+      if (typeof command !== "object" || command === null) return [];
+      const { label, keys, send } = command as Record<string, unknown>;
+      if (typeof label !== "string" || label === "") return [];
+      return [{ label, ...(typeof keys === "string" ? { keys } : {}), ...(typeof send === "string" && send !== "" ? { send } : {}) }];
+    });
+    return valid.length > 0 ? [{ name, commands: valid }] : [];
+  });
+  return parsed.length > 0 ? { app, groups: parsed } : undefined;
+}

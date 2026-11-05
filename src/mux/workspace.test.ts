@@ -3,7 +3,7 @@ import { paneIds } from "./layout.ts";
 import { configSchema } from "./config.ts";
 import type { ReplyChoice } from "./peek.ts";
 import type { Project } from "./projects.ts";
-import { Workspace, type InputKey, type PaneHost } from "./workspace.ts";
+import { Workspace, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
 
 class FakeHost implements PaneHost {
   created: [number, string | undefined][] = [];
@@ -111,6 +111,21 @@ class FakeHost implements PaneHost {
   openWidget(index: number): void {
     this.openedWidgets.push(index);
   }
+  askedKeys: number[] = [];
+  askKeys(id: number): void {
+    this.askedKeys.push(id);
+  }
+  sent: [number, string][] = [];
+  sendKeys(id: number, data: string): void {
+    this.sent.push([id, data]);
+  }
+  recent: RecentTab[] = [];
+  recentTabs(): RecentTab[] {
+    return this.recent;
+  }
+  saveRecentTabs(tabs: RecentTab[]): void {
+    this.recent = tabs;
+  }
 }
 
 function key(spec: string): InputKey {
@@ -145,7 +160,7 @@ describe("Workspace", () => {
   test("pane mode splits, moves focus, and returns to normal", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+p", "r");
+    press(workspace, "ctrl+space", "p", "r");
     expect(workspace.mode).toBe("normal");
     expect(paneIds(workspace.tab.root)).toEqual([1, 2]);
     expect(workspace.focused).toBe(2);
@@ -160,7 +175,7 @@ describe("Workspace", () => {
 
   test("pane mode moves the focused pane with the focus keys", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+p", "r", "ctrl+p", "alt+h");
+    press(workspace, "ctrl+space", "p", "r", "ctrl+space", "p", "alt+h");
     expect(paneIds(workspace.tab.root)).toEqual([2, 1]);
     expect([workspace.focused, workspace.mode]).toEqual([2, "pane"]);
     press(workspace, "alt+right");
@@ -171,15 +186,15 @@ describe("Workspace", () => {
 
   test("new pane picks the split direction from the pane's shape", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+p", "n");
+    press(workspace, "ctrl+space", "p", "n");
     expect(workspace.tab.root).toMatchObject({ kind: "split", axis: "row" });
-    press(workspace, "ctrl+p", "n");
+    press(workspace, "ctrl+space", "p", "n");
     expect(workspace.tab.root).toMatchObject({ children: [{}, { kind: "split", axis: "column" }] });
   });
 
   test("modes swallow unbound keys", () => {
     const workspace = new Workspace(new FakeHost());
-    expect(press(workspace, "ctrl+p", "q")).toEqual([true, true]);
+    expect(press(workspace, "ctrl+space", "p", "q")).toEqual([true, true, true]);
     expect(workspace.mode).toBe("pane");
     press(workspace, "escape");
     expect(workspace.mode).toBe("normal");
@@ -188,16 +203,16 @@ describe("Workspace", () => {
   test("closing panes collapses the layout and the last pane closes the tab", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+t", "c", "ctrl+p", "x");
+    press(workspace, "ctrl+space", "t", "c", "ctrl+space", "p", "x");
     expect(host.destroyed).toEqual([2]);
     expect(workspace.tabs).toHaveLength(1);
-    press(workspace, "ctrl+p", "x");
+    press(workspace, "ctrl+space", "p", "x");
     expect(workspace.quit).toBe(true);
   });
 
   test("pane exit removes it from its tab", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+p", "d");
+    press(workspace, "ctrl+space", "p", "d");
     workspace.paneExited(2);
     expect(paneIds(workspace.tab.root)).toEqual([1]);
     expect(workspace.focused).toBe(1);
@@ -205,10 +220,10 @@ describe("Workspace", () => {
 
   test("tab mode creates, cycles, moves, and jumps between tabs", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "c", "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c", "ctrl+space", "t", "c");
     expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "Tab #2", "Tab #3"]);
     expect(workspace.active).toBe(2);
-    press(workspace, "ctrl+t", "h");
+    press(workspace, "ctrl+space", "t", "h");
     expect(workspace.active).toBe(1);
     press(workspace, "s", "s");
     expect(workspace.active).toBe(0);
@@ -222,13 +237,13 @@ describe("Workspace", () => {
   test("closing a tab requires typing its name", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+t", "c", "ctrl+t", "x");
+    press(workspace, "ctrl+space", "t", "c", "ctrl+space", "t", "x");
     expect(workspace.prompt).toMatchObject({ title: "Close tab", detail: 'Type "Tab #2" to close it' });
     type(workspace, "nope");
     press(workspace, "return");
     expect(workspace.tabs).toHaveLength(2);
     expect(workspace.message).toBe("Kept the tab");
-    press(workspace, "ctrl+t", "x");
+    press(workspace, "ctrl+space", "t", "x");
     type(workspace, "Tab #2");
     press(workspace, "return");
     expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1"]);
@@ -237,12 +252,12 @@ describe("Workspace", () => {
 
   test("renaming tabs and panes", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "r");
+    press(workspace, "ctrl+space", "t", "r");
     for (let i = 0; i < 6; i++) press(workspace, "backspace");
     type(workspace, "api");
     press(workspace, "return");
     expect(workspace.tab.name).toBe("api");
-    press(workspace, "ctrl+p", "c");
+    press(workspace, "ctrl+space", "p", "c");
     type(workspace, "server");
     press(workspace, "return");
     expect(workspace.paneNames.get(1)).toBe("server");
@@ -250,7 +265,7 @@ describe("Workspace", () => {
 
   test("session mode d asks to detach", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+o", "d");
+    press(workspace, "ctrl+space", "s", "d");
     expect(workspace.detachRequested).toBe(true);
     expect(workspace.mode).toBe("normal");
   });
@@ -259,18 +274,59 @@ describe("Workspace", () => {
     const workspace = new Workspace(new FakeHost());
     press(workspace, "ctrl+q");
     expect(workspace.quit).toBe(false);
-    press(workspace, "ctrl+o", "q");
+    press(workspace, "ctrl+space", "s", "q");
     expect(workspace.quit).toBe(false);
     press(workspace, "shift+q");
     expect(workspace.quit).toBe(true);
   });
 
-  test("locked mode passes everything except ctrl+g", () => {
+  test("locked mode passes everything until the leader and l", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+g");
-    expect(press(workspace, "ctrl+p", "alt+h")).toEqual([false, false]);
-    press(workspace, "ctrl+g");
+    press(workspace, "ctrl+space", "l");
+    expect(workspace.mode).toBe("locked");
+    expect(press(workspace, "ctrl+p", "alt+h", "ctrl+t")).toEqual([false, false, false]);
+    expect(press(workspace, "ctrl+space", "p")).toEqual([true, false]);
+    expect(workspace.mode).toBe("locked");
+    expect(press(workspace, "ctrl+space", "l")).toEqual([true, true]);
     expect(workspace.mode).toBe("normal");
+  });
+
+  test("the leader gives back the Ctrl keys it replaced", () => {
+    const workspace = new Workspace(new FakeHost());
+    expect(press(workspace, "ctrl+p", "ctrl+t", "ctrl+s", "ctrl+o", "ctrl+g")).toEqual([false, false, false, false, false]);
+    expect(workspace.mode).toBe("normal");
+  });
+
+  test("the leader runs one-shot keys and returns to normal, Esc cancels, and a stray key leaves", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "n");
+    expect([workspace.mode, paneIds(workspace.tab.root)]).toEqual(["normal", [1, 2]]);
+    press(workspace, "ctrl+space", "escape");
+    expect(workspace.mode).toBe("normal");
+    expect(press(workspace, "ctrl+space", "z")).toEqual([true, true]);
+    expect(workspace.mode).toBe("normal");
+    expect(workspace.message).toContain("Ctrl Space ?");
+  });
+
+  test("the leader twice sends a literal Ctrl Space to the pane", () => {
+    const workspace = new Workspace(new FakeHost());
+    expect(press(workspace, "ctrl+space", "ctrl+space")).toEqual([true, false]);
+    expect(workspace.mode).toBe("normal");
+  });
+
+  test("the leader card waits a moment before showing, and asks the focused app for its keys", () => {
+    const clock = { now: 0 };
+    const host = new FakeHost();
+    const workspace = new Workspace(host, undefined, undefined, () => clock.now);
+    press(workspace, "ctrl+space");
+    expect(host.askedKeys).toEqual([1]);
+    expect(workspace.leaderCardShown()).toBe(false);
+    expect(workspace.leaderWaitMs()).toBe(300);
+    clock.now += 300;
+    expect(workspace.leaderCardShown()).toBe(true);
+    press(workspace, "escape");
+    workspace.openLeader();
+    expect(workspace.leaderCardShown()).toBe(true);
   });
 
   test("an open popup receives every key until it closes", () => {
@@ -279,31 +335,30 @@ describe("Workspace", () => {
     const second = workspace.reservePaneId();
     workspace.openPopup(first, "Deploy?");
     workspace.openPopup(second, "Second");
-    expect(press(workspace, "ctrl+p", "escape", "x")).toEqual([false, false, false]);
-    expect(workspace.mode).toBe("normal");
+    expect(press(workspace, "p", "escape", "x")).toEqual([false, false, false]);
     expect(workspace.mode).toBe("normal");
     workspace.popupExited(first);
     expect(workspace.popup?.title).toBe("Second");
     workspace.popupExited(second);
-    expect(press(workspace, "ctrl+p")).toEqual([true]);
+    expect(press(workspace, "ctrl+space", "p")).toEqual([true, true]);
     expect(workspace.mode).toBe("pane");
   });
 
   test("a popup belongs to the asking pane's tab and tab keys still work over it", () => {
     const clock = { now: 0 };
     const workspace = new Workspace(new FakeHost(), undefined, undefined, () => clock.now);
-    press(workspace, "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c");
     const popup = workspace.reservePaneId();
     expect(workspace.openPopup(popup, "Question", 1)).toBe(true);
     expect(workspace.popup).toBeUndefined();
     expect(workspace.popupsWaiting(workspace.tabs[0]!)).toBe(1);
     expect(workspace.tabAttention(workspace.tabs[0]!)).toBe("waiting");
     expect(press(workspace, "a")).toEqual([false]);
-    press(workspace, "ctrl+t", "h", "escape");
+    press(workspace, "ctrl+space", "t", "h", "escape");
     clock.now += 2000;
     expect(workspace.popup?.title).toBe("Question");
     expect(press(workspace, "a")).toEqual([false]);
-    expect(press(workspace, "ctrl+t", "s")).toEqual([true, true]);
+    expect(press(workspace, "ctrl+space", "t", "s")).toEqual([true, true, true]);
     expect(workspace.active).toBe(1);
   });
 
@@ -314,13 +369,13 @@ describe("Workspace", () => {
     workspace.openPopup(popup, "Question", 1);
     clock.now += 2000;
     expect(workspace.popup?.title).toBe("Question");
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     expect(press(workspace, "m", "e")).toEqual([true, true]);
     expect(workspace.prompt?.text).toBe("me");
     press(workspace, "escape");
     expect(workspace.prompt).toBeUndefined();
     expect(press(workspace, "a")).toEqual([false]);
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     type(workspace, "merlot");
     press(workspace, "return");
     expect(workspace.tab.name).toBe("merlot");
@@ -332,9 +387,9 @@ describe("Workspace", () => {
     const workspace = new Workspace(host);
     const id = workspace.reservePaneId();
     workspace.openPopup(id, "Stuck");
-    expect(press(workspace, "ctrl+o", "x")).toEqual([true, true]);
+    expect(press(workspace, "ctrl+space", "s", "x")).toEqual([true, true, true]);
     expect(host.closedPopups).toEqual([id]);
-    press(workspace, "ctrl+o", "d");
+    press(workspace, "ctrl+space", "s", "d");
     expect(workspace.detachRequested).toBe(true);
   });
 
@@ -345,7 +400,7 @@ describe("Workspace", () => {
       layouts: { ide: { row: [{ command: ["dev", "claude"], focus: true }, { column: [{ command: ["remax"] }, {}] }] } },
     });
     const workspace = new Workspace(host, "/home", config);
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     expect(workspace.prompt?.matches?.map((match) => match.name)).toEqual(["penny", "penny-auth", "merlot"]);
     type(workspace, "pen");
     press(workspace, "tab");
@@ -395,7 +450,7 @@ describe("Workspace", () => {
       workspace.openProject("merlot");
       const id = workspace.tab.id;
       const jobs = workspace.tabJobs().map((job) => job.id);
-      press(workspace, "ctrl+t", "x");
+      press(workspace, "ctrl+space", "t", "x");
       type(workspace, "merlot");
       press(workspace, "return");
       expect(host.closedTabs).toEqual([id]);
@@ -414,40 +469,40 @@ describe("Workspace", () => {
       expect(workspace.jobs).toEqual([]);
     });
 
-    test("Alt+Enter in the launcher opens a project without its jobs, and Ctrl+s s starts the missing ones", () => {
+    test("Alt+Enter in the launcher opens a project without its jobs, and Ctrl Space j s starts the missing ones", () => {
       const host = new FakeHost();
       const workspace = new Workspace(host, "/home", config);
-      press(workspace, "ctrl+t", "o");
+      press(workspace, "ctrl+space", "t", "o");
       type(workspace, "merlot");
       press(workspace, "alt+return");
       expect(workspace.tab.name).toBe("merlot");
       expect(workspace.tabJobs()).toEqual([]);
-      press(workspace, "ctrl+s", "s");
+      press(workspace, "ctrl+space", "j", "s");
       expect(workspace.tabJobs().map((job) => [job.name, job.dock, job.layout])).toEqual([
         ["server", true, true],
         ["make watch", false, true],
       ]);
       expect(host.jobCwds.get(workspace.tabJobs()[0]!.id)).toBe("/work/acme/merlot");
-      press(workspace, "ctrl+s", "s");
+      press(workspace, "ctrl+space", "j", "s");
       expect(workspace.message).toBe("All of this tab's layout jobs are running");
       const [server, watch] = workspace.tabJobs();
       workspace.closeJob(server!.id);
       workspace.jobFinished(watch!.id, 1);
-      press(workspace, "ctrl+s", "s");
+      press(workspace, "ctrl+space", "j", "s");
       expect(workspace.tabJobs().map((job) => [job.name, job.state])).toEqual([
         ["make watch", "running"],
         ["server", "running"],
       ]);
       expect(host.reruns).toEqual([watch!.id]);
       workspace.openProject("penny");
-      press(workspace, "ctrl+s", "s");
+      press(workspace, "ctrl+space", "j", "s");
       expect(workspace.message).toBe("This tab's layout has no jobs");
     });
 
-    test("Ctrl+s d docks and undocks the selected job", () => {
+    test("Ctrl Space j d docks and undocks the selected job", () => {
       const workspace = new Workspace(new FakeHost(), "/home", config);
       workspace.openProject("merlot");
-      press(workspace, "ctrl+s", "down", "d");
+      press(workspace, "ctrl+space", "j", "down", "d");
       expect(workspace.tabJobs().map((job) => job.dock)).toEqual([true, true]);
       press(workspace, "up", "d");
       expect(workspace.tabJobs().map((job) => job.dock)).toEqual([false, true]);
@@ -479,10 +534,9 @@ describe("Workspace", () => {
 
     test("named tabs lead the launcher and hide a project of the same name", () => {
       const workspace = new Workspace(new FakeHost(), "/home", config);
-      press(workspace, "ctrl+t", "o");
+      press(workspace, "ctrl+space", "t", "o");
       expect(workspace.prompt?.candidates?.map((candidate) => `${candidate.name} ${candidate.dir}`)).toEqual([
         "dashboard /home/me/dashboard",
-        "logs /var/log",
         "penny /elsewhere",
         "penny-auth /work/stories/penny-auth",
         "merlot /work/acme/merlot",
@@ -493,7 +547,7 @@ describe("Workspace", () => {
       const host = new FakeHost();
       const workspace = new Workspace(host, "/home", config);
       workspace.active = 1;
-      press(workspace, "ctrl+t", "x");
+      press(workspace, "ctrl+space", "t", "x");
       type(workspace, "dashboard");
       press(workspace, "return");
       expect(workspace.tabs.map((tab) => tab.name)).toEqual(["logs"]);
@@ -509,7 +563,7 @@ describe("Workspace", () => {
   test("opening a pane near another places it beside that pane in its tab", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c");
     expect(workspace.openPaneNear(1, "right", ["dashboard", "pane", "comments"], { name: "comments" })).toBe(3);
     expect([workspace.active, workspace.focused]).toEqual([0, 3]);
     expect(workspace.tab.root).toMatchObject({ kind: "split", axis: "row", children: [{ id: 1 }, { id: 3 }] });
@@ -542,17 +596,17 @@ describe("Workspace", () => {
     expect(workspace.tab.root).toMatchObject({ children: [{}, { selected: 1 }] });
     press(workspace, "alt+s");
     expect(workspace.focused).toBe(4);
-    press(workspace, "ctrl+p", "n");
+    press(workspace, "ctrl+space", "p", "n");
     expect(workspace.tab.root).toMatchObject({ children: [{}, { panes: [3, 4, 5], selected: 2 }] });
-    press(workspace, "alt+h", "ctrl+p", "n");
+    press(workspace, "alt+h", "ctrl+space", "p", "n");
     expect(workspace.tab.root).toMatchObject({ children: [{}, { panes: [3, 4, 5, 6], selected: 3 }] });
-    press(workspace, "alt+h", "ctrl+p", "s");
+    press(workspace, "alt+h", "ctrl+space", "p", "s");
     expect(workspace.tab.root).toMatchObject({ children: [{ kind: "tabs", panes: [2, 7], selected: 1 }, {}] });
   });
 
   test("the project launcher selects matches with the arrow keys", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     type(workspace, "pen");
     expect(workspace.prompt?.matches?.map((match) => match.name)).toEqual(["penny", "penny-auth"]);
     press(workspace, "down");
@@ -565,7 +619,7 @@ describe("Workspace", () => {
 
   test("the project launcher opens every marked project and focuses the first", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     type(workspace, "pen ");
     press(workspace, "backspace", "backspace", "backspace");
     type(workspace, "mer ");
@@ -578,29 +632,30 @@ describe("Workspace", () => {
 
   test("the project launcher unmarks a project marked twice", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "o");
     type(workspace, "pen  ");
     expect(workspace.prompt?.marked).toEqual([]);
     press(workspace, "down", "return");
     expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "penny-auth"]);
   });
 
-  test("the project launcher switches to marked projects that already have tabs", () => {
+  test("the switcher marks projects but not open tabs", () => {
     const workspace = new Workspace(new FakeHost());
     workspace.openProject("merlot");
-    press(workspace, "ctrl+t", "h", "ctrl+t", "o");
+    press(workspace, "ctrl+space", "t", "h", "ctrl+space", "t", "o");
     type(workspace, "merlot ");
+    expect(workspace.prompt?.marked).toEqual([]);
     press(workspace, "backspace", "backspace", "backspace", "backspace", "backspace", "backspace");
     type(workspace, "pen ");
     press(workspace, "return");
-    expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "merlot", "penny"]);
-    expect(workspace.tab.name).toBe("merlot");
+    expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "penny", "merlot"]);
+    expect(workspace.tab.name).toBe("penny");
   });
 
   test("opening a project that already has a tab switches to it", () => {
     const workspace = new Workspace(new FakeHost());
     expect(workspace.openProject("merlot")).toBeUndefined();
-    press(workspace, "ctrl+t", "h");
+    press(workspace, "ctrl+space", "t", "h");
     expect(workspace.openProject("merl")).toBeUndefined();
     expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "merlot"]);
     expect(workspace.active).toBe(1);
@@ -659,7 +714,7 @@ describe("Workspace", () => {
   test("a held pane re-runs on Enter, becomes a shell on Esc, and closes on Ctrl+c", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+p", "r");
+    press(workspace, "ctrl+space", "p", "r");
     host.held.add(2);
     expect(press(workspace, "x", "return")).toEqual([true, true]);
     expect(host.reruns).toEqual([2]);
@@ -667,7 +722,7 @@ describe("Workspace", () => {
     press(workspace, "escape");
     expect(host.shells).toEqual([2]);
     host.held.add(2);
-    press(workspace, "ctrl+p", "escape");
+    press(workspace, "ctrl+space", "p", "escape");
     expect(workspace.mode).toBe("normal");
     press(workspace, "ctrl+c");
     expect(paneIds(workspace.tab.root)).toEqual([1]);
@@ -679,7 +734,7 @@ describe("Workspace", () => {
     const clock = { now: 0 };
     const workspace = new Workspace(host, undefined, undefined, () => clock.now);
     host.held.add(1);
-    press(workspace, "ctrl+g", "return");
+    press(workspace, "ctrl+space", "l", "return");
     expect(host.reruns).toEqual([1]);
     host.held.add(1);
     expect(workspace.focusedPaneHeld()).toBe(true);
@@ -740,7 +795,7 @@ describe("Workspace", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host, undefined, undefined, () => clock.now);
     const agent = workspace.focused;
-    press(workspace, "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c");
     const elsewhere = workspace.active;
     workspace.setAgentState(agent, "done", "Built it");
     press(workspace, "alt+p");
@@ -768,7 +823,7 @@ describe("Workspace", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
     const first = workspace.focused;
-    press(workspace, "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c");
     const second = workspace.focused;
     workspace.setAgentState(first, "done", "first reply");
     workspace.active = 0;
@@ -806,7 +861,7 @@ describe("Workspace", () => {
   test("Alt+a takes you to a question and shows it straight away", () => {
     const clock = { now: 0 };
     const workspace = new Workspace(new FakeHost(), undefined, undefined, () => clock.now);
-    press(workspace, "ctrl+t", "c");
+    press(workspace, "ctrl+space", "t", "c");
     workspace.openPopup(workspace.reservePaneId(), "Question", 1);
     press(workspace, "alt+a");
     expect([workspace.active, workspace.focused]).toEqual([0, 1]);
@@ -815,26 +870,26 @@ describe("Workspace", () => {
 
   test("closing a pane in a pane-tab group keeps focus in the group", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+p", "r", "ctrl+p", "s", "ctrl+p", "s");
+    press(workspace, "ctrl+space", "p", "r", "ctrl+space", "p", "s", "ctrl+space", "p", "s");
     expect(workspace.tab.root).toMatchObject({ children: [{}, { kind: "tabs", panes: [2, 3, 4] }] });
-    press(workspace, "alt+o", "ctrl+p", "x");
+    press(workspace, "alt+o", "ctrl+space", "p", "x");
     expect(workspace.focused).toBe(4);
   });
 
-  test("Ctrl+t a goes back to the previous tab", () => {
+  test("Ctrl Space t a goes back to the previous tab", () => {
     const workspace = new Workspace(new FakeHost());
-    press(workspace, "ctrl+t", "c", "ctrl+t", "c", "ctrl+t", "1");
+    press(workspace, "ctrl+space", "t", "c", "ctrl+space", "t", "c", "ctrl+space", "t", "1");
     expect(workspace.active).toBe(0);
-    press(workspace, "ctrl+t", "a");
+    press(workspace, "ctrl+space", "t", "a");
     expect(workspace.active).toBe(2);
-    press(workspace, "ctrl+t", "a");
+    press(workspace, "ctrl+space", "t", "a");
     expect(workspace.active).toBe(0);
   });
 
   describe("agent states", () => {
     function twoTabs(): Workspace {
       const workspace = new Workspace(new FakeHost());
-      press(workspace, "ctrl+p", "r", "ctrl+t", "c");
+      press(workspace, "ctrl+space", "p", "r", "ctrl+space", "t", "c");
       return workspace;
     }
 
@@ -870,7 +925,7 @@ describe("Workspace", () => {
 
     test("typing into a waiting agent's pane means it is being answered", () => {
       const workspace = twoTabs();
-      press(workspace, "ctrl+t", "h", "escape");
+      press(workspace, "ctrl+space", "t", "h", "escape");
       workspace.setAgentState(2, "waiting");
       press(workspace, "y");
       expect(workspace.agents.get(2)).toBe("working");
@@ -901,10 +956,10 @@ describe("Workspace", () => {
     });
   });
 
-  test("Ctrl+t w picks a tray widget to open", () => {
+  test("Ctrl Space t w picks a tray widget to open", () => {
     const host = new FakeHost();
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+t", "w");
+    press(workspace, "ctrl+space", "t", "w");
     expect(workspace.mode).toBe("tray");
     press(workspace, "s", "s", "s", "return");
     expect(host.openedWidgets).toEqual([1]);
@@ -915,7 +970,7 @@ describe("Workspace", () => {
     const host = new FakeHost();
     host.widgets = 0;
     const workspace = new Workspace(host);
-    press(workspace, "ctrl+t", "w");
+    press(workspace, "ctrl+space", "t", "w");
     expect(workspace.mode).toBe("normal");
     expect(workspace.message).toBe("The tray has no widgets");
   });
@@ -929,7 +984,7 @@ describe("Workspace", () => {
     function split() {
       const host = new FakeHost();
       const workspace = new Workspace(host, "/home");
-      press(workspace, "ctrl+p", "d");
+      press(workspace, "ctrl+space", "p", "d");
       return { host, workspace };
     }
 
@@ -1040,12 +1095,12 @@ describe("Workspace", () => {
 
     test("pane mode zooms the drawer, and resize mode changes its height within bounds", () => {
       const { workspace } = split();
-      press(workspace, "alt+d", "ctrl+p", "f");
+      press(workspace, "alt+d", "ctrl+space", "p", "f");
       expect(workspace.drawerOf()?.zoomed).toBe(true);
       expect(workspace.tab.zoomed).toBe(false);
       press(workspace, "alt+d", "alt+d");
       expect(workspace.drawerOf()?.zoomed).toBe(true);
-      press(workspace, "ctrl+p", "e", "up");
+      press(workspace, "ctrl+space", "p", "e", "up");
       expect(workspace.mode).toBe("resize");
       expect(workspace.drawerOf()).toMatchObject({ zoomed: false, height: 50 });
       press(workspace, ...Array(8).fill("t"));
@@ -1058,23 +1113,23 @@ describe("Workspace", () => {
 
     test("resize mode needs an open drawer", () => {
       const { workspace } = split();
-      press(workspace, "ctrl+p", "e");
+      press(workspace, "ctrl+space", "p", "e");
       expect(workspace.mode).toBe("normal");
       expect(workspace.message).toBe("The drawer isn't open");
     });
 
     test("each tab keeps its own drawer", () => {
       const { host, workspace } = split();
-      press(workspace, "alt+d", "ctrl+t", "c", "alt+d");
+      press(workspace, "alt+d", "ctrl+space", "t", "c", "alt+d");
       expect(workspace.drawerOf()?.id).toBe(5);
-      press(workspace, "ctrl+t", "h");
+      press(workspace, "ctrl+space", "t", "h");
       expect(workspace.drawerOf()?.id).toBe(3);
       expect(host.created.map(([id]) => id)).toEqual([1, 2, 3, 4, 5]);
     });
 
     test("the drawer survives a layout restart and closes when its shell exits", () => {
       const { host, workspace } = split();
-      press(workspace, "alt+d", "alt+t", "ctrl+t", "shift+r");
+      press(workspace, "alt+d", "alt+t", "ctrl+space", "t", "shift+r");
       type(workspace, workspace.tab.name);
       press(workspace, "return");
       expect(host.destroyed).not.toContain(3);
@@ -1089,11 +1144,11 @@ describe("Workspace", () => {
 
     test("closing the drawer from pane mode, or its tab, destroys its shell", () => {
       const { host, workspace } = split();
-      press(workspace, "alt+d", "ctrl+p", "x");
+      press(workspace, "alt+d", "ctrl+space", "p", "x");
       expect(host.destroyed).toEqual([3]);
       expect(workspace.tab.drawer).toBeUndefined();
       expect(paneIds(workspace.tab.root)).toEqual([1, 2]);
-      press(workspace, "alt+d", "ctrl+t", "x");
+      press(workspace, "alt+d", "ctrl+space", "t", "x");
       type(workspace, workspace.tab.name);
       press(workspace, "return");
       expect(host.destroyed).toContain(4);
@@ -1122,10 +1177,10 @@ describe("Workspace", () => {
       return { host, workspace };
     }
 
-    test("Ctrl+s n runs a typed command out of sight and badges the tab while it runs", () => {
+    test("Ctrl Space j n runs a typed command out of sight and badges the tab while it runs", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
-      press(workspace, "ctrl+s", "n");
+      press(workspace, "ctrl+space", "j", "n");
       type(workspace, "make test");
       press(workspace, "return");
       expect(host.jobs).toEqual([[5, ["sh", "-c", "make test"], workspace.tab.id]]);
@@ -1173,7 +1228,7 @@ describe("Workspace", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
       const id = workspace.runJob(2, ["false"], "build")!;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.jobFinished(id, 2);
       clock.now = 60_000;
       expect(workspace.toasts()).toMatchObject([{ kind: "job", job: { name: "build" }, tab: { name: "merlot" } }]);
@@ -1192,7 +1247,7 @@ describe("Workspace", () => {
       const clock = { now: 0 };
       const { workspace } = ide(clock);
       const id = workspace.runJob(2, ["false"], "build")!;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.jobFinished(id, 2);
       workspace.setAgentState(3, "done", "reply");
       expect(workspace.toasts()).toMatchObject([{ kind: "job", job: { name: "build" } }, { kind: "reply" }]);
@@ -1235,7 +1290,7 @@ describe("Workspace", () => {
       const { host, workspace } = ide(clock);
       workspace.runJob(2, ["one"]);
       const two = workspace.runJob(2, ["two"])!;
-      press(workspace, "ctrl+s", "down", "r");
+      press(workspace, "ctrl+space", "j", "down", "r");
       expect(host.reruns).toEqual([]);
       expect(workspace.message).toBe("two is still running");
       workspace.jobFinished(two, 1);
@@ -1243,21 +1298,21 @@ describe("Workspace", () => {
       expect(host.reruns).toEqual([two]);
       press(workspace, "return");
       expect(workspace.popup?.id).toBe(two);
-      press(workspace, "ctrl+s", "h");
+      press(workspace, "ctrl+space", "j", "h");
       expect(workspace.popup).toBeUndefined();
-      press(workspace, "ctrl+s", "x");
+      press(workspace, "ctrl+space", "j", "x");
       expect(workspace.selectedJob).toBe(0);
       expect(workspace.tabJobs().map((job) => job.name)).toEqual(["one"]);
     });
 
-    test("Ctrl+s b sends a pane running a command to the background until the command finishes", () => {
+    test("Ctrl Space j b sends a pane running a command to the background until the command finishes", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
-      press(workspace, "ctrl+s", "b");
+      press(workspace, "ctrl+space", "j", "b");
       expect(workspace.message).toBe("Nothing is running in this pane");
       press(workspace, "alt+s", "alt+e");
       host.running.set(4, "cargo build");
-      press(workspace, "ctrl+s", "b");
+      press(workspace, "ctrl+space", "j", "b");
       expect(workspace.tab.root).toMatchObject({ children: [{ id: 2 }, { id: 3 }] });
       expect(workspace.focused).toBe(3);
       expect(host.tracked).toEqual([4]);
@@ -1285,7 +1340,7 @@ describe("Workspace", () => {
       workspace.setAgentState(claude, "working");
       expect(workspace.tabAttention(workspace.tab)).toBe("working");
       expect(workspace.tabCommandState(workspace.tab)).toBeUndefined();
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       expect(workspace.setAgentState(claude, "done")).toBe(true);
       expect(workspace.openPopup(90, "Allow Write?", claude)).toBe(true);
       expect(workspace.popups.at(-1)?.tabId).toBe(workspace.tabs.find((tab) => tab.name === "merlot")!.id);
@@ -1297,7 +1352,7 @@ describe("Workspace", () => {
       workspace.setAgentState(claude, "waiting");
       press(workspace, "x");
       expect(workspace.agents.get(claude)).toBe("working");
-      press(workspace, "ctrl+s", "h");
+      press(workspace, "ctrl+space", "j", "h");
       host.claudes.add(claude);
       press(workspace, "alt+c");
       expect(host.composed).toEqual([claude]);
@@ -1329,7 +1384,7 @@ describe("Workspace", () => {
       const host = new FakeHost();
       const workspace = new Workspace(host);
       host.running.set(1, "sleep 30");
-      press(workspace, "ctrl+s", "b");
+      press(workspace, "ctrl+space", "j", "b");
       expect(workspace.message).toBe("The tab's last pane can't go to the background");
       expect(workspace.jobs).toEqual([]);
     });
@@ -1338,7 +1393,7 @@ describe("Workspace", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
       host.running.set(2, "sleep 30");
-      press(workspace, "ctrl+s", "b");
+      press(workspace, "ctrl+space", "j", "b");
       workspace.paneExited(2);
       expect(workspace.jobs).toEqual([]);
       expect(workspace.message).toBe("sleep 30 ended");
@@ -1358,7 +1413,7 @@ describe("Workspace", () => {
       workspace.setAgentState(claude, "working");
       expect(workspace.popup).toBeUndefined();
       workspace.setAgentState(claude, "done");
-      press(workspace, "ctrl+s", "return");
+      press(workspace, "ctrl+space", "j", "return");
       workspace.setAgentState(claude, "working");
       expect(workspace.popup).toMatchObject({ id: claude, kind: "job" });
     });
@@ -1371,7 +1426,7 @@ describe("Workspace", () => {
       expect(workspace.jobStatus(job)?.agent).toBe(false);
       workspace.markAgent(job);
       workspace.jobFinished(job, 0);
-      press(workspace, "ctrl+s", "r");
+      press(workspace, "ctrl+space", "j", "r");
       expect(workspace.jobStatus(job)).toMatchObject({ state: "running", agent: false });
     });
 
@@ -1388,7 +1443,7 @@ describe("Workspace", () => {
       press(workspace, "alt+j");
       expect(workspace.message).toBe("No job or question to reopen");
       const job = workspace.runJob(2, ["make"])!;
-      press(workspace, "ctrl+s", "return");
+      press(workspace, "ctrl+space", "j", "return");
       expect(workspace.popup).toMatchObject({ id: job, kind: "job" });
       press(workspace, "alt+j");
       expect(workspace.popup).toBeUndefined();
@@ -1398,7 +1453,7 @@ describe("Workspace", () => {
       press(workspace, "alt+j");
       expect(workspace.popup).toBeUndefined();
       const merlot = workspace.tab;
-      press(workspace, "ctrl+t", "c", "alt+j");
+      press(workspace, "ctrl+space", "t", "c", "alt+j");
       expect(workspace.tab).not.toBe(merlot);
       expect(workspace.popup).toBeUndefined();
       expect(workspace.message).toBe("No job or question to reopen");
@@ -1411,9 +1466,9 @@ describe("Workspace", () => {
       clock.now = 10;
       const newest = workspace.runJob(2, ["make", "test"])!;
       clock.now = 20;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.runJob(workspace.focused, ["elsewhere"]);
-      press(workspace, "ctrl+t", "a", "alt+j");
+      press(workspace, "ctrl+space", "t", "a", "alt+j");
       expect(workspace.popup).toMatchObject({ id: newest, kind: "job" });
     });
 
@@ -1423,7 +1478,7 @@ describe("Workspace", () => {
       const merlot = workspace.tab;
       const agent = merlot.layoutFocus;
       const other = paneIds(merlot.root).find((id) => id !== agent)!;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "first");
       clock.now = 10;
       workspace.setAgentState(other, "done", "second");
@@ -1438,7 +1493,7 @@ describe("Workspace", () => {
     test("Alt a shows an agent's question where you are, then peeks at unread replies", () => {
       const { host, workspace } = ide({ now: 5 });
       const [first, second] = paneIds(workspace.tab.root) as [number, number];
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       const merlot = workspace.tabs.find((tab) => tab.name === "merlot")!;
       workspace.setAgentState(first, "done", "Which one?");
       expect(workspace.openPopup(90, "Allow Write?", second)).toBe(true);
@@ -1476,7 +1531,7 @@ describe("Workspace", () => {
     test("a reply marked for no toast leaves the tab as it was before the turn", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "Shall I start?");
       workspace.setAgentState(agent, "working");
       expect(workspace.setAgentState(agent, "done", "That was my own edit.", "none")).toBe(false);
@@ -1498,7 +1553,7 @@ describe("Workspace", () => {
     test("a wakeup turn keeps the tab as it was and still toasts a reply that needs you", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "Shall I start?");
       expect(workspace.setAgentState(agent, "working", undefined, undefined, true)).toBe(false);
       expect(workspace.agents.get(agent)).toBe("done");
@@ -1520,7 +1575,7 @@ describe("Workspace", () => {
       const clock = { now: 5 };
       const { workspace } = ide(clock);
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "Shall I start?");
       workspace.setAgentState(agent, "working", undefined, undefined, true);
       expect(workspace.nextWakeupShown()).toBe(1000);
@@ -1546,7 +1601,7 @@ describe("Workspace", () => {
     test("a wakeup that needs you, or arrives mid-turn, changes state as usual", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "working", undefined, undefined, true);
       expect(workspace.agents.has(agent)).toBe(false);
       workspace.setAgentState(agent, "waiting");
@@ -1561,7 +1616,7 @@ describe("Workspace", () => {
     test("a quiet reply keeps a badge it can't place in a turn, and drops one you saw mid-turn", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       const elsewhere = workspace.active;
       workspace.setAgentState(agent, "done", "Shall I start?");
       workspace.setAgentState(agent, "done", "Nothing new.", "none");
@@ -1578,7 +1633,7 @@ describe("Workspace", () => {
       const clock = { now: 5 };
       const { workspace } = ide(clock);
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "Shall I start?");
       workspace.setAgentState(agent, "working");
       expect(workspace.setAgentState(agent, "done", "Build passed.", "brief")).toBe(false);
@@ -1597,7 +1652,7 @@ describe("Workspace", () => {
       const clock = { now: 1 };
       const { host, workspace } = ide(clock);
       const [first, second] = paneIds(workspace.tab.root) as [number, number];
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(first, "done", "older question");
       clock.now = 5;
       workspace.setAgentState(second, "done", "newer question");
@@ -1613,7 +1668,7 @@ describe("Workspace", () => {
       const clock = { now: 0 };
       const { host, workspace } = ide(clock);
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       const elsewhere = workspace.active;
       workspace.setAgentState(agent, "done", "first");
       press(workspace, "alt+p");
@@ -1643,7 +1698,7 @@ describe("Workspace", () => {
     test("an unread reply outlasts ten newer read ones", () => {
       const { workspace } = ide({ now: 5 });
       const agent = workspace.focused;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       workspace.setAgentState(agent, "done", "Shall I start?");
       for (let n = 0; n < 12; n += 1) {
         workspace.setAgentState(agent, "working");
@@ -1655,7 +1710,7 @@ describe("Workspace", () => {
       expect(kept.at(-1)).toBe("event 11");
     });
 
-    test("Ctrl+t R rebuilds the tab from its layout after you type its name", () => {
+    test("Ctrl Space t R rebuilds the tab from its layout after you type its name", () => {
       const host = new FakeHost();
       const config = configSchema.parse({
         projects: { layout: "up" },
@@ -1667,12 +1722,12 @@ describe("Workspace", () => {
       const before = paneIds(tab.root);
       const layoutJob = tab.layoutRuns.get(0)!;
       const adHoc = workspace.runJob(tab.layoutFocus, ["make"])!;
-      press(workspace, "ctrl+p", "r");
+      press(workspace, "ctrl+space", "p", "r");
       workspace.openPopup(90, "Allow Write?", tab.layoutFocus);
       press(workspace, "alt+j");
-      press(workspace, "ctrl+t", "shift+r", "x", "return");
+      press(workspace, "ctrl+space", "t", "shift+r", "x", "return");
       expect(workspace.message).toBe("Left the tab running");
-      press(workspace, "ctrl+t", "shift+r", ..."merlot".split(""), "return");
+      press(workspace, "ctrl+space", "t", "shift+r", ..."merlot".split(""), "return");
       expect(workspace.tab).toBe(tab);
       expect(host.destroyed).toEqual(expect.arrayContaining([...before, layoutJob, adHoc]));
       expect(paneIds(tab.root)).toHaveLength(2);
@@ -1687,16 +1742,16 @@ describe("Workspace", () => {
       const config = configSchema.parse({ projects: { layout: "up" }, layouts: { up: { row: [{}], jobs: [{ command: ["scripts/up"] }] } } });
       const workspace = new Workspace(new FakeHost(), "/home", config, () => 0);
       workspace.openProject("merlot", false);
-      press(workspace, "ctrl+t", "shift+r", ..."merlot".split(""), "return");
+      press(workspace, "ctrl+space", "t", "shift+r", ..."merlot".split(""), "return");
       expect(workspace.tabJobs(workspace.tab)).toEqual([]);
     });
 
     test("closing the last tab with several jobs closes them all", () => {
       const { host, workspace } = ide({ now: 0 });
       const first = workspace.tab.name;
-      press(workspace, "ctrl+t", "c");
+      press(workspace, "ctrl+space", "t", "c");
       const jobs = [workspace.runJob(workspace.focused, ["one"])!, workspace.runJob(workspace.focused, ["two"])!];
-      press(workspace, "ctrl+t", "x", ...workspace.tab.name.split(""), "return");
+      press(workspace, "ctrl+space", "t", "x", ...workspace.tab.name.split(""), "return");
       expect(host.destroyed).toEqual(expect.arrayContaining(jobs));
       expect(workspace.jobs).toEqual([]);
       expect(workspace.tab.name).toBe(first);
@@ -1734,7 +1789,7 @@ describe("Workspace", () => {
     expect(workspace.popup?.id).toBe(50);
     workspace.popupExited(50);
     const job = workspace.runJob(agent, ["make"])!;
-    press(workspace, "ctrl+s", "return");
+    press(workspace, "ctrl+space", "j", "return");
     expect(workspace.popup).toMatchObject({ id: job, kind: "job" });
     workspace.jobFinished(job, 0);
     expect(press(workspace, "alt+a")).toEqual([true]);
@@ -1745,7 +1800,7 @@ describe("Workspace", () => {
     const workspace = new Workspace(host);
     press(workspace, "alt+c");
     expect(workspace.message).toBe("No native Claude in this tab");
-    press(workspace, "ctrl+p", "r");
+    press(workspace, "ctrl+space", "p", "r");
     host.claudes.add(1);
     press(workspace, "alt+c");
     expect(host.composed).toEqual([1]);
@@ -1761,7 +1816,7 @@ describe("Workspace", () => {
     const workspace = new Workspace(host);
     press(workspace, "alt+shift+c");
     expect(workspace.message).toBe("No native Claude in this tab");
-    press(workspace, "ctrl+p", "r");
+    press(workspace, "ctrl+space", "p", "r");
     host.claudes.add(1);
     press(workspace, "alt+shift+c");
     press(workspace, "alt+shift+C");
@@ -1774,15 +1829,15 @@ describe("Workspace", () => {
     expect(host.composed).toEqual([]);
   });
 
-  test("Ctrl+s reaches an ask popup, so forms can submit, but opens jobs mode over a job", () => {
+  test("Ctrl+s reaches popups, so forms can submit, and the leader opens jobs mode over a job", () => {
     const workspace = new Workspace(new FakeHost());
     workspace.openPopup(50, "Question");
     expect(press(workspace, "ctrl+s")).toEqual([false]);
-    expect(workspace.mode).toBe("normal");
     workspace.popupExited(50);
     const job = workspace.runJob(1, ["sleep", "5"])!;
     workspace.openJob(job);
-    press(workspace, "ctrl+s");
+    expect(press(workspace, "ctrl+s")).toEqual([false]);
+    press(workspace, "ctrl+space", "j");
     expect(workspace.mode).toBe("jobs");
   });
 });
@@ -1825,5 +1880,131 @@ describe("scripts", () => {
     expect(state.jobs).toEqual([{ name: "deploy", state: "running", agent: undefined }]);
     expect(state.panes.some((pane) => pane.agent === "working")).toBe(true);
     expect(workspace.scriptState(999)).toBeUndefined();
+  });
+});
+
+describe("tab switching", () => {
+  const ide = configSchema.parse({ projects: { layout: "ide" }, layouts: { ide: { row: [{ focus: true }, {}] } } });
+
+  test("Alt h at the leftmost pane goes to the previous tab's rightmost pane, and Alt s spills right without wrapping", () => {
+    const workspace = new Workspace(new FakeHost(), "/home", ide);
+    workspace.openProject("merlot");
+    workspace.openProject("penny");
+    expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "merlot", "penny"]);
+    press(workspace, "alt+h");
+    expect([workspace.tab.name, workspace.focused]).toEqual(["merlot", 3]);
+    press(workspace, "alt+h", "alt+h");
+    expect(workspace.tab.name).toBe("Tab #1");
+    press(workspace, "alt+h");
+    expect(workspace.tab.name).toBe("Tab #1");
+    press(workspace, "alt+s");
+    expect([workspace.tab.name, workspace.focused]).toEqual(["merlot", 2]);
+    press(workspace, "alt+s", "alt+s", "alt+s", "alt+s");
+    expect([workspace.tab.name, workspace.focused]).toEqual(["penny", 5]);
+  });
+
+  test("Alt 1 to 9 go straight to a tab", () => {
+    const workspace = new Workspace(new FakeHost());
+    workspace.openProject("merlot");
+    press(workspace, "alt+1");
+    expect(workspace.active).toBe(0);
+    press(workspace, "alt+2");
+    expect(workspace.active).toBe(1);
+    press(workspace, "alt+9");
+    expect(workspace.active).toBe(1);
+  });
+
+  test("the switcher lists open tabs most recent first, then closed tabs, then projects", () => {
+    const clock = { now: 0 };
+    const host = new FakeHost();
+    const workspace = new Workspace(host, undefined, undefined, () => clock.now);
+    for (const name of ["merlot", "penny", "penny-auth"]) {
+      clock.now += 10;
+      workspace.openProject(name);
+    }
+    clock.now += 10;
+    press(workspace, "alt+2");
+    clock.now += 10;
+    press(workspace, "ctrl+space", "t", "x");
+    type(workspace, "merlot");
+    press(workspace, "return");
+    clock.now += 10;
+    press(workspace, "ctrl+space", "space");
+    expect(workspace.prompt?.candidates?.map((entry) => `${entry.kind} ${entry.name}`)).toEqual(["tab penny-auth", "tab Tab #1", "closed merlot"]);
+    press(workspace, "return");
+    expect(workspace.tab.name).toBe("penny-auth");
+    press(workspace, "ctrl+space", "space");
+    type(workspace, "mer");
+    press(workspace, "return");
+    expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "penny", "penny-auth", "merlot"]);
+  });
+
+  test("closed tabs come back from the host after a restart", () => {
+    const host = new FakeHost();
+    host.recent = [{ title: "merlot #12", project: { name: "merlot", dir: "/work/acme/merlot" }, at: 5 }];
+    const workspace = new Workspace(host);
+    press(workspace, "ctrl+space", "space");
+    expect(workspace.prompt?.candidates?.slice(0, 2).map((entry) => `${entry.kind} ${entry.name}`)).toEqual(["closed merlot #12", "project penny"]);
+  });
+
+  test("a digit in the empty switcher jumps to that tab, and filters once there's text", () => {
+    const workspace = new Workspace(new FakeHost());
+    workspace.openProject("merlot");
+    press(workspace, "ctrl+space", "space");
+    type(workspace, "1");
+    expect([workspace.prompt, workspace.active]).toEqual([undefined, 0]);
+    press(workspace, "ctrl+space", "space");
+    type(workspace, "m2");
+    expect(workspace.prompt?.text).toBe("m2");
+  });
+});
+
+describe("command palette", () => {
+  test("? on the leader lists every command by name and runs the one picked", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "?");
+    expect(workspace.mode).toBe("normal");
+    const names = workspace.palette!.entries.map((entry) => `${entry.name} · ${entry.keys}`);
+    expect(names).toContain("message Claude · Alt c");
+    expect(names).toContain("new tab · ^␣ t c");
+    expect(names).toContain("tab mode · ^␣ t");
+    type(workspace, "new tab");
+    expect(workspace.palette!.matches[0]!.name).toBe("new tab");
+    press(workspace, "return");
+    expect([workspace.palette, workspace.tabs.length, workspace.mode]).toEqual([undefined, 2, "normal"]);
+  });
+
+  test("? in a mode shows that mode's commands with their keys in the mode, and returns to it", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "t", "c", "ctrl+space", "t", "?");
+    expect(workspace.palette?.scope).toBe("tab");
+    expect(workspace.palette!.entries.map((entry) => entry.keys)).toContain("x");
+    type(workspace, "previous tab");
+    press(workspace, "return");
+    expect([workspace.active, workspace.mode]).toEqual([0, "tab"]);
+    press(workspace, "?", "escape");
+    expect([workspace.palette, workspace.mode]).toEqual([undefined, "tab"]);
+  });
+
+  test("the focused app's commands join the palette and send their keys to its pane", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    press(workspace, "ctrl+space", "/");
+    workspace.setAppKeys(1, { app: "remax", groups: [{ name: "Review", commands: [{ label: "accept hunk as reviewed", keys: "⏎", send: "\r" }, { label: "flag hunk", keys: "!" }] }] });
+    type(workspace, "hunk");
+    expect(workspace.palette!.matches.map((entry) => `${entry.app} ${entry.name}`)).toEqual(["remax accept hunk as reviewed", "remax flag hunk"]);
+    press(workspace, "return");
+    expect(host.sent).toEqual([[1, "\r"]]);
+    press(workspace, "ctrl+space", "/");
+    type(workspace, "flag");
+    press(workspace, "return");
+    expect(host.sent).toHaveLength(1);
+    expect(workspace.message).toContain("can't run it");
+  });
+
+  test("an answer from a pane that lost focus is dropped", () => {
+    const workspace = new Workspace(new FakeHost());
+    workspace.setAppKeys(7, { app: "remax", groups: [{ name: "Review", commands: [{ label: "x" }] }] });
+    expect(workspace.focusedApp()).toBeUndefined();
   });
 });

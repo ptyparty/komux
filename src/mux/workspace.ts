@@ -1,12 +1,31 @@
-import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId } from "./layout.ts";
+import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId, type Rect } from "./layout.ts";
 import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type LayoutEntry, type LayoutSpec } from "./config.ts";
-import { keyName, lookup, type Command, type Key, type Mode } from "./keymap.ts";
+import { keyName, leaderKey, lookup, type Binding, type Command, type Key, type Mode } from "./keymap.ts";
+import type { AppKeys } from "./context.ts";
+import { fuzzyScore, paletteEntries, rankEntries, type Palette, type PaletteEntry } from "./palette.ts";
 import type { QuietToast } from "./control.ts";
 import { replyChoices, type ReplyChoice } from "./peek.ts";
-import { expandHome, findRepo, looksLikePath, rankProjects, resolveTarget, type Project } from "./projects.ts";
+import { expandHome, findRepo, looksLikePath, resolveTarget, type Project } from "./projects.ts";
 
 export type Drawer = { id: PaneId; height: number; open: boolean; zoomed: boolean };
-export type Tab = { id: number; name: string; root: LayoutNode; layoutFocus: PaneId; zoomed: boolean; layout: LayoutSpec; layoutJobs: JobSpec[]; layoutRuns: Map<number, PaneId>; cwd?: string; drawerSpec?: DrawerSpec; drawer?: Drawer };
+export type Opened = { project: Project; args?: Record<string, string> };
+export type Tab = {
+  id: number;
+  name: string;
+  root: LayoutNode;
+  layoutFocus: PaneId;
+  zoomed: boolean;
+  layout: LayoutSpec;
+  layoutJobs: JobSpec[];
+  layoutRuns: Map<number, PaneId>;
+  cwd?: string;
+  drawerSpec?: DrawerSpec;
+  drawer?: Drawer;
+  opened?: Opened;
+  focusedAt: number;
+};
+export type RecentTab = Opened & { title: string; at: number };
+export type SwitchEntry = { kind: "tab" | "closed" | "project"; name: string; dir: string; tabId?: number; number?: number; at?: number; opened?: Opened };
 
 export type PopupSize = { width: number; height: number };
 export type Popup = { id: PaneId; title: string; tabId: number; kind: "ask" | "view" | "job"; askingPane?: PaneId; size?: PopupSize; hidden?: boolean; key?: string };
@@ -36,15 +55,17 @@ const wakeupGraceMs = 1000;
 const keptFinishedJobs = 5;
 const keptReplies = 10;
 const drawerHeights = { initial: 40, step: 10, min: 20, max: 80 };
+const leaderDelayMs = 300;
+const keptRecentTabs = 40;
 
 export type Prompt = {
-  kind: "rename-tab" | "rename-pane" | "close-tab" | "restart-tab" | "open-project" | "run-job";
+  kind: "rename-tab" | "rename-pane" | "close-tab" | "restart-tab" | "switch" | "run-job";
   title: string;
   detail?: string;
   text: string;
-  candidates?: Project[];
-  matches?: Project[];
-  marked?: Project[];
+  candidates?: SwitchEntry[];
+  matches?: SwitchEntry[];
+  marked?: SwitchEntry[];
   selected: number;
 };
 
@@ -73,18 +94,23 @@ export interface PaneHost {
   screen(): { cols: number; rows: number };
   widgetCount(): number;
   openWidget(index: number): void;
+  askKeys(id: PaneId): void;
+  sendKeys(id: PaneId, data: string): void;
+  recentTabs(): RecentTab[];
+  saveRecentTabs(tabs: RecentTab[]): void;
 }
 
 export type InputKey = Key & { sequence: string };
 
-const popupPassthrough = new Set(["ctrl+t", "ctrl+o", "alt+x", "alt+a", "alt+p", "alt+c", "alt+j"]);
-const jobPopupPassthrough = new Set([...popupPassthrough, "ctrl+s"]);
+const popupPassthrough = new Set([leaderKey, "alt+x", "alt+a", "alt+p", "alt+c", "alt+j"]);
 
 export class Workspace {
   tabs: Tab[] = [];
   active = 0;
   mode: Mode = "normal";
   prompt: Prompt | undefined;
+  palette: Palette | undefined;
+  appKeys: { pane: PaneId; keys: AppKeys } | undefined;
   message: string | undefined;
   picking: string | undefined;
   quit = false;
@@ -116,6 +142,10 @@ export class Workspace {
   private readonly shownPopups = new Set<PaneId>();
   private currentTabId: number | undefined;
   private previousTabId: number | undefined;
+  private leaderAt = Number.NEGATIVE_INFINITY;
+  private leaderForced = false;
+  lockLeader = false;
+  private recent: RecentTab[];
 
   constructor(
     private readonly host: PaneHost,
@@ -123,6 +153,7 @@ export class Workspace {
     private readonly config: Config = defaultConfig,
     private readonly now: () => number = Date.now,
   ) {
+    this.recent = host.recentTabs();
     const startup = namedTabs(config).filter((tab) => config.startup.includes(tab.name));
     startup.sort((a, b) => config.startup.indexOf(a.name) - config.startup.indexOf(b.name));
     if (startup.length === 0) this.openTab(initialCwd);
@@ -230,11 +261,110 @@ export class Workspace {
 
   private selectFocusedTabs(): void {
     for (const tab of this.tabs) tab.root = selectPaneTab(tab.root, tab.layoutFocus);
-    const id = this.tabs[this.active]?.id;
-    if (id !== this.currentTabId) {
+    const tab = this.tabs[this.active];
+    if (tab && tab.id !== this.currentTabId) {
       this.previousTabId = this.currentTabId;
-      this.currentTabId = id;
+      this.currentTabId = tab.id;
+      tab.focusedAt = this.now();
+      this.remember(tab);
     }
+  }
+
+  private remember(tab: Tab): void {
+    if (!tab.opened) return;
+    const entry: RecentTab = { ...tab.opened, title: tab.name, at: this.now() };
+    const key = recentKey(entry);
+    this.recent = [entry, ...this.recent.filter((kept) => recentKey(kept) !== key)].slice(0, keptRecentTabs);
+    this.host.saveRecentTabs(this.recent);
+  }
+
+  leaderCardShown(): boolean {
+    return this.mode === "leader" && (this.leaderForced || this.now() - this.leaderAt >= leaderDelayMs);
+  }
+
+  leaderWaitMs(): number | undefined {
+    if (this.mode !== "leader" || this.leaderCardShown()) return undefined;
+    return Math.max(this.leaderAt + leaderDelayMs - this.now(), 0);
+  }
+
+  openLeader(): void {
+    this.prompt = undefined;
+    this.palette = undefined;
+    this.enterLeader();
+    this.leaderForced = true;
+  }
+
+  private enterLeader(): void {
+    this.mode = "leader";
+    this.leaderAt = this.now();
+    this.leaderForced = false;
+    this.askKeys();
+  }
+
+  private askKeys(): void {
+    if (this.appKeys?.pane !== this.focused) this.appKeys = undefined;
+    this.host.askKeys(this.focused);
+  }
+
+  setAppKeys(pane: PaneId, keys: AppKeys | undefined): void {
+    if (pane !== this.focused) return;
+    this.appKeys = keys ? { pane, keys } : undefined;
+    const palette = this.palette;
+    if (!palette || palette.scope) return;
+    palette.entries = paletteEntries(undefined, this.appKeys);
+    palette.matches = rankEntries(palette.text, palette.entries);
+    palette.selected = Math.min(palette.selected, Math.max(palette.matches.length - 1, 0));
+  }
+
+  focusedApp(): AppKeys | undefined {
+    return this.appKeys?.pane === this.focused ? this.appKeys.keys : undefined;
+  }
+
+  private openPalette(scope: Mode | undefined): void {
+    const back = scope ?? "normal";
+    if (!scope) this.askKeys();
+    const entries = paletteEntries(scope, scope ? undefined : this.appKeys);
+    this.palette = { scope, back, text: "", entries, matches: entries, selected: 0 };
+    this.mode = back;
+  }
+
+  private editPalette(key: InputKey): void {
+    const palette = this.palette!;
+    const name = keyName(key);
+    if (name === "escape") {
+      this.palette = undefined;
+      return;
+    }
+    if (name === "return") {
+      this.palette = undefined;
+      const entry = palette.matches[palette.selected];
+      if (entry) this.runPaletteEntry(entry, palette.back);
+      return;
+    }
+    const step = name === "up" || name === "ctrl+p" ? -1 : name === "down" || name === "ctrl+n" ? 1 : 0;
+    if (step !== 0) {
+      if (palette.matches.length > 0) palette.selected = wrap(palette.selected + step, palette.matches.length);
+      return;
+    }
+    if (key.name === "backspace") palette.text = palette.text.slice(0, -1);
+    else if (!key.ctrl && !key.meta && isPrintable(key.sequence)) palette.text += key.sequence;
+    else return;
+    palette.matches = rankEntries(palette.text, palette.entries);
+    palette.selected = 0;
+  }
+
+  private runPaletteEntry(entry: PaletteEntry, back: Mode): void {
+    if (entry.binding) return this.runBinding(entry.binding, back);
+    this.mode = "normal";
+    if (entry.send !== undefined && entry.pane !== undefined) return this.host.sendKeys(entry.pane, entry.send);
+    this.message = `${entry.app} lists "${entry.name}" but can't run it from here`;
+  }
+
+  private runBinding(binding: Binding, back: Mode): void {
+    if (binding.command.type === "mode") return this.run(binding.command);
+    this.mode = back;
+    this.run(binding.command);
+    if (binding.then && !this.palette) this.mode = binding.then;
   }
 
   setAgentState(id: PaneId, state: AgentState | undefined, reply?: string, toast?: QuietToast, wakeup = false): boolean {
@@ -695,14 +825,18 @@ export class Workspace {
   }
 
   private routeKey(key: InputKey): boolean {
+    if (this.palette) {
+      this.editPalette(key);
+      return true;
+    }
     if (this.prompt) {
       this.editPrompt(key);
       return true;
     }
+    if (this.mode === "locked") return this.lockedKey(key);
     const popup = this.popup;
-    const passthrough = popup?.kind === "job" ? jobPopupPassthrough : popupPassthrough;
     const finishedJob = popup?.kind === "job" && this.jobStatus(popup.id)?.state !== "running";
-    if (finishedJob && this.mode === "normal" && !passthrough.has(keyName(key))) {
+    if (finishedJob && this.mode === "normal" && !popupPassthrough.has(keyName(key))) {
       return this.finishedJobKey(popup!.id, key);
     }
     if (popup?.kind === "view" && this.host.isHeld(popup.id)) {
@@ -710,16 +844,42 @@ export class Workspace {
       this.popupExited(popup.id);
       return true;
     }
-    if (popup && this.mode === "normal" && !passthrough.has(keyName(key))) return false;
+    if (popup && this.mode === "normal" && !popupPassthrough.has(keyName(key))) return false;
     const binding = lookup(this.mode, key);
     if (binding?.command.type === "dismiss-toast" && this.toasts().length === 0) return false;
+    if (binding?.command.type === "pass") {
+      this.mode = "normal";
+      return false;
+    }
     if (binding) {
       this.run(binding.command);
       if (binding.then) this.mode = binding.then;
       return true;
     }
-    if ((this.mode === "normal" || this.mode === "locked") && this.host.isHeld(this.focused)) return this.heldKey(key);
-    return this.mode !== "normal" && this.mode !== "locked";
+    if (this.mode === "leader") {
+      this.mode = "normal";
+      this.message = `Nothing is on Ctrl Space ${showKeyName(key)} · Ctrl Space ? lists every command`;
+      return true;
+    }
+    if (this.mode === "normal" && this.host.isHeld(this.focused)) return this.heldKey(key);
+    return this.mode !== "normal";
+  }
+
+  private lockedKey(key: InputKey): boolean {
+    const name = keyName(key);
+    if (this.lockLeader) {
+      this.lockLeader = false;
+      if (name === "l") {
+        this.mode = "normal";
+        return true;
+      }
+      return false;
+    }
+    if (name === leaderKey) {
+      this.lockLeader = true;
+      return true;
+    }
+    return this.host.isHeld(this.focused) && !this.popup ? this.heldKey(key) : false;
   }
 
   focusedPaneHeld(): boolean {
@@ -769,10 +929,10 @@ export class Workspace {
     return error;
   }
 
-  private openProjects(projects: Project[], withJobs: boolean): void {
+  private openProjects(projects: Opened[], withJobs: boolean): void {
     let first: number | undefined;
-    for (const project of projects) {
-      this.showProject(project, withJobs);
+    for (const { project, args } of projects) {
+      this.showProject(project, withJobs, args);
       first ??= this.active;
     }
     if (first !== undefined) this.active = first;
@@ -784,7 +944,10 @@ export class Workspace {
     if ("error" in opened) return opened.error;
     const existing = this.tabs.findIndex((tab) => tab.name === opened.name);
     if (existing >= 0) this.active = existing;
-    else this.openTab(project.dir, { ...opened, withJobs });
+    else {
+      this.openTab(project.dir, { ...opened, withJobs, opened: { project, ...(Object.keys(args).length > 0 ? { args } : {}) } });
+      this.remember(this.tab);
+    }
     return undefined;
   }
 
@@ -841,6 +1004,7 @@ export class Workspace {
   private run(command: Command): void {
     switch (command.type) {
       case "mode":
+        if (command.mode === "leader") return this.enterLeader();
         if (command.mode === "tray" && this.host.widgetCount() === 0) {
           this.message = "The tray has no widgets";
           this.mode = "normal";
@@ -853,8 +1017,14 @@ export class Workspace {
         }
         this.mode = command.mode;
         return;
+      case "pass":
+        return;
+      case "palette":
+        return this.openPalette(this.mode === "leader" || this.mode === "normal" ? undefined : this.mode);
+      case "switcher":
+        return this.openSwitcher();
       case "focus":
-        return this.moveFocus(command.direction);
+        return this.moveFocus(command.direction, command.spill);
       case "swap-pane": {
         if (this.drawerOf()) return;
         const target = neighbor(this.tab.root, this.tab.layoutFocus, command.direction);
@@ -887,11 +1057,6 @@ export class Workspace {
         return;
       case "new-tab":
         return this.openTab(this.config.defaultCwd ? expandHome(this.config.defaultCwd) : this.host.cwd(this.focused));
-      case "open-project": {
-        const candidates = this.projects();
-        this.prompt = { kind: "open-project", title: "Open project", text: "", candidates, matches: candidates, marked: [], selected: 0 };
-        return;
-      }
       case "restart-tab":
         this.prompt = { kind: "restart-tab", title: "Restart tab", detail: `Type "${this.tab.name}" to rebuild it from its layout`, text: "", selected: 0 };
         return;
@@ -1005,14 +1170,56 @@ export class Workspace {
     }
   }
 
-  private moveFocus(direction: Direction): void {
+  private moveFocus(direction: Direction, spill = false): void {
     const tab = this.tab;
     if (this.drawerOf(tab)) {
       if (direction === "up") this.leaveDrawer(tab);
       return;
     }
     const target = neighbor(tab.root, tab.layoutFocus, direction);
-    if (target !== undefined) Object.assign(tab, { layoutFocus: target, zoomed: false });
+    if (target !== undefined) return void Object.assign(tab, { layoutFocus: target, zoomed: false });
+    if (spill && (direction === "left" || direction === "right")) this.spillTo(direction, paneRects(tab.root).get(tab.layoutFocus));
+  }
+
+  private spillTo(direction: "left" | "right", from: Rect | undefined): void {
+    const next = this.active + (direction === "left" ? -1 : 1);
+    if (next < 0 || next >= this.tabs.length) return;
+    this.active = next;
+    const tab = this.tab;
+    this.leaveDrawer(tab);
+    if (tab.zoomed) return;
+    const rects = [...paneRects(tab.root)];
+    const edge = (rect: Rect) => (direction === "left" ? rect.x + rect.width : -rect.x);
+    const outermost = Math.max(...rects.map(([, rect]) => edge(rect)));
+    const candidates = rects.filter(([, rect]) => Math.abs(edge(rect) - outermost) < 1e-9);
+    if (candidates.some(([id]) => id === tab.layoutFocus)) return;
+    const middle = (rect: Rect) => rect.y + rect.height / 2;
+    const level = from ? middle(from) : 0.5;
+    candidates.sort(([, a], [, b]) => Math.abs(middle(a) - level) - Math.abs(middle(b) - level));
+    if (candidates[0]) tab.layoutFocus = candidates[0][0];
+  }
+
+  private openSwitcher(): void {
+    const candidates = this.switchEntries();
+    this.prompt = { kind: "switch", title: "Go to tab or project", detail: "most recent first", text: "", candidates, matches: candidates, marked: [], selected: 0 };
+  }
+
+  switchEntries(): SwitchEntry[] {
+    const current = this.tab;
+    const open = this.tabs
+      .map((tab, index) => ({ tab, index }))
+      .filter(({ tab }) => tab !== current)
+      .sort((a, b) => b.tab.focusedAt - a.tab.focusedAt)
+      .map(({ tab, index }): SwitchEntry => ({ kind: "tab", name: tab.name, dir: tab.cwd ?? this.host.cwd(tab.layoutFocus) ?? "", tabId: tab.id, number: index + 1, at: tab.focusedAt, opened: tab.opened }));
+    const openNames = new Set(this.tabs.map((tab) => tab.name));
+    const closed = this.recent
+      .filter((recent) => !openNames.has(recent.title))
+      .map((recent): SwitchEntry => ({ kind: "closed", name: recent.title, dir: recent.project.dir, at: recent.at, opened: { project: recent.project, args: recent.args } }));
+    const listed = new Set([...openNames, ...closed.map((entry) => entry.name)]);
+    const projects = this.projects()
+      .filter((project) => !listed.has(project.name))
+      .map((project): SwitchEntry => ({ kind: "project", name: project.name, dir: project.dir, opened: { project } }));
+    return [...open, ...closed, ...projects];
   }
 
   private toggleDrawer(): void {
@@ -1087,10 +1294,23 @@ export class Workspace {
     return rect.width * cols > rect.height * rows * 2.2 ? "row" : "column";
   }
 
-  private openTab(cwd: string | undefined, options: { name?: string; layout?: LayoutEntry; withJobs?: boolean } = {}): void {
+  private openTab(cwd: string | undefined, options: { name?: string; layout?: LayoutEntry; withJobs?: boolean; opened?: Opened } = {}): void {
     const number = this.nextTabNumber++;
     const layout = options.layout?.layout ?? {};
-    const tab: Tab = { id: number, name: options.name ?? `Tab #${number}`, root: leaf(0), layoutFocus: 0, zoomed: false, layout, layoutJobs: options.layout?.jobs ?? [], layoutRuns: new Map(), cwd, drawerSpec: options.layout?.drawer };
+    const tab: Tab = {
+      id: number,
+      name: options.name ?? `Tab #${number}`,
+      root: leaf(0),
+      layoutFocus: 0,
+      zoomed: false,
+      layout,
+      layoutJobs: options.layout?.jobs ?? [],
+      layoutRuns: new Map(),
+      cwd,
+      drawerSpec: options.layout?.drawer,
+      opened: options.opened,
+      focusedAt: this.now(),
+    };
     this.tabs.splice(this.tabs.length === 0 ? 0 : this.active + 1, 0, tab);
     this.active = this.tabs.length === 1 ? 0 : this.active + 1;
     this.createLayoutPanes(tab);
@@ -1195,13 +1415,21 @@ export class Workspace {
       return this.commitPrompt(prompt, !key.meta);
     }
     const matches = prompt.matches ?? [];
-    if (key.name === "up" || key.name === "down") {
-      if (matches.length > 0) prompt.selected = (prompt.selected + (key.name === "up" ? -1 : 1) + matches.length) % matches.length;
+    if (prompt.kind === "switch" && prompt.text === "" && !key.ctrl && !key.meta && /^[1-9]$/.test(key.sequence)) {
+      const index = Number(key.sequence) - 1;
+      this.prompt = undefined;
+      if (index < this.tabs.length) this.active = index;
+      else this.message = `There is no tab ${key.sequence}`;
+      return;
+    }
+    if (key.name === "up" || key.name === "down" || (key.ctrl && (key.name === "p" || key.name === "n"))) {
+      const up = key.name === "up" || key.name === "p";
+      if (matches.length > 0) prompt.selected = (prompt.selected + (up ? -1 : 1) + matches.length) % matches.length;
       return;
     }
     if (prompt.marked && key.sequence === " ") {
       const selected = matches[prompt.selected];
-      if (selected) prompt.marked = toggleMark(prompt.marked, selected);
+      if (selected && selected.kind !== "tab") prompt.marked = toggleMark(prompt.marked, selected);
       return;
     }
     if (key.name === "tab") {
@@ -1211,7 +1439,7 @@ export class Workspace {
     else if (!key.ctrl && !key.meta && isPrintable(key.sequence)) prompt.text += key.sequence;
     else return;
     if (prompt.candidates) {
-      prompt.matches = rankProjects(prompt.text, prompt.candidates);
+      prompt.matches = rankSwitch(prompt.text, prompt.candidates);
       prompt.selected = 0;
     }
   }
@@ -1237,10 +1465,19 @@ export class Workspace {
         if (prompt.text === this.tab.name) return this.restartTab();
         this.message = "Left the tab running";
         return;
-      case "open-project": {
-        if (prompt.marked && prompt.marked.length > 0) return this.openProjects(prompt.marked, withJobs);
-        const target = looksLikePath(text) ? text : (prompt.matches?.[prompt.selected]?.name ?? text);
-        if (target) this.message = this.openProject(target, withJobs);
+      case "switch": {
+        if (prompt.marked && prompt.marked.length > 0) return this.openProjects(prompt.marked.flatMap((entry) => (entry.opened ? [entry.opened] : [])), withJobs);
+        const entry = looksLikePath(text) ? undefined : prompt.matches?.[prompt.selected];
+        if (entry?.kind === "tab") {
+          const index = this.tabs.findIndex((tab) => tab.id === entry.tabId);
+          if (index >= 0) this.active = index;
+          return;
+        }
+        if (entry?.opened) {
+          this.message = this.showProject(entry.opened.project, withJobs, entry.opened.args);
+          return this.selectFocusedTabs();
+        }
+        if (text) this.message = this.openProject(text, withJobs);
         return;
       }
     }
@@ -1268,8 +1505,29 @@ function wrap(index: number, length: number): number {
   return ((index % length) + length) % length;
 }
 
-function toggleMark(marked: Project[], project: Project): Project[] {
-  return marked.some((mark) => mark.dir === project.dir) ? marked.filter((mark) => mark.dir !== project.dir) : [...marked, project];
+function toggleMark(marked: SwitchEntry[], entry: SwitchEntry): SwitchEntry[] {
+  return marked.some((mark) => mark.name === entry.name) ? marked.filter((mark) => mark.name !== entry.name) : [...marked, entry];
+}
+
+function rankSwitch(query: string, entries: SwitchEntry[]): SwitchEntry[] {
+  const needle = query.trim().toLowerCase();
+  if (needle === "") return entries;
+  const sections = { tab: 0, closed: 1, project: 2 };
+  const scored = entries.flatMap((entry, index) => {
+    const score = entry.number !== undefined && String(entry.number) === needle ? 0 : fuzzyScore(needle, entry.name.toLowerCase());
+    return score === undefined ? [] : [{ entry, score, index }];
+  });
+  return scored
+    .sort((a, b) => a.score - b.score || sections[a.entry.kind] - sections[b.entry.kind] || a.entry.name.length - b.entry.name.length || a.index - b.index)
+    .map(({ entry }) => entry);
+}
+
+function recentKey(recent: RecentTab): string {
+  return recent.title;
+}
+
+function showKeyName(key: Key): string {
+  return key.shift && key.name.length === 1 ? key.name.toUpperCase() : key.name;
 }
 
 function isPrintable(sequence: string): boolean {
