@@ -66,6 +66,41 @@ Run `komux --help` for every option. `skills/komux-ask/SKILL.md` documents the f
 
 The bottom bar lists the keys that work in the focused field.
 
+## Keys in komux
+
+komux takes one key from the programs in its panes, **Ctrl Space**, plus a handful of Alt keys. Everything else, Ctrl+p, Ctrl+t, Ctrl+s, Ctrl+o and Ctrl+g included, goes to the program.
+
+- **The leader:** Ctrl Space, then a letter. Pause for a moment, or click `^␣ keys` at the right of the bar, and a card above the bar lists every group and its keys, with a column for the focused program's own commands when it offers them. Esc closes it, and Ctrl Space twice sends a Ctrl Space to the program.
+- **Modes:** `p` pane, `t` tab, `j` jobs, `s` session and `w` tray each open a mode that lasts until Esc, so a stray key never drops you out of one. Its card stays above the bar while you're in it. One-shot keys such as `n` (new pane) run and return to normal.
+- **Every command by name:** `?` on the leader, or `/`, opens a palette of every komux command with its keys, filtered as you type; Enter runs one. `?` in a mode lists just that mode's commands. The focused program's commands are in the palette too, tagged with its name, and picking one types its keys into the pane.
+- **Locking:** Ctrl Space `l` sends every key to the program until Ctrl Space `l` again.
+
+| Without the leader | |
+|---|---|
+| Alt h / t / n / s | focus the pane left, up, down, right; left of the leftmost pane goes to the previous tab, right of the rightmost to the next (it doesn't wrap) |
+| Alt 1–9 | go to tab N |
+| Alt o / e | previous / next pane |
+| Alt c, Alt C | message Claude, with what you're looking at |
+| Alt p, Alt j, Alt x | peek at a reply, hide or reopen a job or question, dismiss a toast |
+| Alt d | the shell drawer |
+| Alt a | the next agent that needs you |
+
+| After Ctrl Space | |
+|---|---|
+| Space or o | the tab switcher |
+| 1–9, a | tab N, the last tab |
+| ← ↓ ↑ →, n, x, f | focus, new pane, close pane, zoom |
+| r, b | run a job, send this pane to the background |
+| c, C, v, g | message Claude, about this, peek at a reply, the next agent that needs you |
+| d | detach |
+| p, t, j, s, w | pane, tab, jobs, session and tray modes |
+| l | lock |
+| ? or / | every command |
+
+### The tab switcher
+
+Ctrl Space Space (or Space in tab mode) lists the open tabs, most recently used first, then tabs closed recently, including the ones open when komux last quit, then the projects under `projects.roots`. Each row shows the tab's Claude state and the title of the latest Claude conversation in its directory. Typing filters by name, `1`–`9` on an empty filter jump straight to that tab, and Enter goes to the tab or opens the project. Space marks several projects to open at once, and Alt+Enter opens them without their layout's jobs. Recently closed tabs are kept in `$XDG_STATE_HOME/komux/recent-tabs.json`.
+
 ## How asks work
 
 Each ask is stored as a directory under `$XDG_RUNTIME_DIR/komux/asks/<id>/`. Set `KOMUX_STATE_DIR` to store them somewhere else.
@@ -76,7 +111,7 @@ Each ask is stored as a directory under `$XDG_RUNTIME_DIR/komux/asks/<id>/`. Set
 
 ## Layout jobs
 
-A layout in `~/.config/komux/config.ts` can list `jobs`: commands that start out of sight with the tab, like jobs from Ctrl+s n, and close with it. `dock: true` docks one from the start. `projects.layoutFor` picks a layout for a particular project, overriding `projects.layout`:
+A layout in `~/.config/komux/config.ts` can list `jobs`: commands that start out of sight with the tab, like jobs from Ctrl Space r, and close with it. `dock: true` docks one from the start. `projects.layoutFor` picks a layout for a particular project, overriding `projects.layout`:
 
 ```ts
 export default {
@@ -93,12 +128,12 @@ export default {
 
 Every project opened with `ide` gets an editor, a shell, and a [native Claude](#native-claude-experimental) docked below them. Claude waits there without starting until Alt c in the tab picks a conversation, so opening a project costs nothing until you talk to it.
 
-- **Named tabs:** `tabs: { home: { layout: "ide", cwd: "~/work" } }` defines a tab with its own layout and working directory. Named tabs appear first in the Ctrl+t o launcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
+- **Named tabs:** `tabs: { home: { layout: "ide", cwd: "~/work" } }` defines a tab with its own layout and working directory. Named tabs appear in the tab switcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
 - **Args:** a layout with `args: ["pr"]` is opened by `komux project --layout pr-review --arg pr=12`, which fills `{pr}` into its commands, job names, drawer, and tab `name`, along with `{project}`. `name: "{project} #{pr}"` gives each PR its own tab, so the same args switch back to it. Such a layout can't be a project's or named tab's default.
 - **Repos:** `komux project --repo ptyparty/komux` opens the clone under `projects.roots` whose path ends in `ptyparty/komux`.
 - **Startup:** `startup: ["home"]` opens those named tabs when a session starts, instead of a plain tab.
 - **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab. A job can put its socket there for the tab's panes to find.
-- **Without jobs:** Alt+Enter in the Ctrl+t o launcher opens a project without starting its layout's jobs. Ctrl+s s starts them later.
+- **Without jobs:** Alt+Enter in the tab switcher opens a project without starting its layout's jobs. Ctrl Space j s starts them later.
 - **Earlier configs:** layouts used to take `services`; rename them to `jobs`.
 
 From inside a pane, `komux pane open [--right|--below|--tab] [--name NAME] [--no-focus] -- COMMAND...` opens a pane beside it in the same tab and prints the new pane's id. With `--popup` (and optionally `--width`/`--height` in percent), the command opens over the tab at once and takes the keys. The popup closes when the command exits successfully. After a failure it stays up until the next key, so the error can be read.
@@ -122,7 +157,7 @@ layouts: {
 
 ## Jobs
 
-A job is a command that runs out of sight in a tab, in a terminal of its own. Press Ctrl+s for jobs mode, which lists the tab's jobs:
+A job is a command that runs out of sight in a tab, in a terminal of its own. Press Ctrl Space j for jobs mode, which lists the tab's jobs:
 
 - **n** prompts for a command and runs it as a job in the focused pane's directory.
 - **b** sends the focused pane to the background while it is busy with a long command. Its shell keeps running, and the job is done when that command finishes. This needs the fish integration that also drives the `⏳` badges.
@@ -154,7 +189,7 @@ komux script types                     # what a script can call
 
 The MCP server offers the same as `script_run`, `script_send`, `script_wait` and `script_stop`, and the `komux-script` skill teaches agents to use them.
 
-A script runs as a job in the tab it was started from, so Ctrl+s, Alt j and the job chips work on it. Its panel is the job's popup; ↑/↓ move between list items, table rows and buttons, and Enter selects one. It runs until it exits, is stopped, or its tab closes.
+A script runs as a job in the tab it was started from, so jobs mode, Alt j and the job chips work on it. Its panel is the job's popup; ↑/↓ move between list items, table rows and buttons, and Enter selects one. It runs until it exits, is stopped, or its tab closes.
 
 Scripts run in QuickJS compiled to WebAssembly, on a thread of their own. The sandbox has no `fetch`, file, process, module or Node/Bun APIs, only the `komux` calls above, and every value crosses into komux as plain JSON. Those calls reach only what komux shows: none of them can start a command, type into a pane, or prompt another agent, and forms from scripts can't show images, since those read files. A script is stopped when one step runs over 100 ms, when it stops responding for 2 s, when it uses 64 MB, or when it throws.
 
@@ -188,9 +223,17 @@ A program offers context by listening on `$KOMUX_TAB_DIR/context/$KOMUX_PANE_ID.
 
 The first answer must come within a second, or komux opens the plain box; after `picking` it waits as long as it takes. Closing the connection at either end cancels. `text` is markdown that tells Claude where the context is, with a path it can open, then a quote. Send images and long output as file paths.
 
+The same socket tells komux which keys the program takes, for the leader card and the command palette. When the card or the palette opens, komux sends `{"keys": 1}` and waits a moment for one line before closing the connection:
+
+```json
+{"keys":{"app":"remax","groups":[{"name":"Review","commands":[{"label":"accept hunk as reviewed","keys":"⏎","send":"\r"}]}]}}
+```
+
+`keys` is what the card and palette show, and `send` is what komux types into the pane to run the command. A command without `send` is listed but can't be run from komux. List only what works in the program's current state. A program that doesn't answer in time adds nothing.
+
 `komux claude compose --from-stdin --label LABEL` still opens the box with stdin attached, for programs that predate the socket. It will go away.
 
-Started without `--resume` or `--continue` in a directory with past conversations, `komux claude` first lists them in the pane: conversations open in another komux pane, ones running in other terminals, **New conversation**, and the last few past ones with their age and last prompt. Picking one open in a komux pane moves focus there and closes this pane instead of opening the conversation twice. Esc quits. Run as a job, such as from a layout, it waits without starting Claude: its dock row reads `not started · Alt c`. **Alt c** in that tab (or Enter in the job) shows the picker, which adds **Don't start Claude** to close the job (Ctrl+s s starts it again). After you pick, the job hides itself and the message box opens for your first message. Esc in the picker puts it back to waiting.
+Started without `--resume` or `--continue` in a directory with past conversations, `komux claude` first lists them in the pane: conversations open in another komux pane, ones running in other terminals, **New conversation**, and the last few past ones with their age and last prompt. Picking one open in a komux pane moves focus there and closes this pane instead of opening the conversation twice. Esc quits. Run as a job, such as from a layout, it waits without starting Claude: its dock row reads `not started · Alt c`. **Alt c** in that tab (or Enter in the job) shows the picker, which adds **Don't start Claude** to close the job (Ctrl Space j s starts it again). After you pick, the job hides itself and the message box opens for your first message. Esc in the picker puts it back to waiting.
 
 Add `komux` to `untrackedCommands` if the `⏳` badge on a pane running `komux claude` gets in the way.
 
@@ -200,7 +243,7 @@ Each pane keeps 50 MB of history by default, roughly 70,000 lines at 80 columns 
 
 ## Tray
 
-The right end of the mode bar holds the tray: by default a CPU and memory widget and a clock. Click a widget, or press Ctrl+t w, pick one with h/s, and press Enter, to open its popup. The system widget opens btop, htop, or top, whichever is installed first in that order.
+The right end of the mode bar holds the tray: by default a CPU and memory widget and a clock. Click a widget, or press Ctrl Space w, pick one with h/s, and press Enter, to open its popup. The system widget opens btop, htop, or top, whichever is installed first in that order.
 
 ```ts
 export default {
@@ -248,7 +291,7 @@ With the hooks in place:
 - **Wakeups:** when a background job wakes an agent for a turn you didn't start, its tab and badge stay as they were, and the dock row adds `· handling a job event`. A reply from that turn still toasts unless it is marked quiet, and a permission request still shows `!`.
 - **Permission popups:** a permission request opens a popup in the agent's tab with Allow once, Always allow and Deny. Esc hands the question back to Claude's own prompt.
 - **Plan review:** when Claude finishes planning, the plan opens as rendered markdown in a popup. Approve in auto mode, approve and auto-accept edits, approve and review each edit, or keep planning with a note for Claude. Esc dismisses the plan and stops Claude, like Esc in Claude's own dialog.
-- **Hiding a question:** **Alt j** hides an open komux form so you can look around before answering. It stays pending, the tab keeps its `?`, and the hint bar says a question is waiting. Alt j (or Alt a) shows it again.
+- **Hiding a question:** **Alt j** hides an open komux form so you can look around before answering. It stays pending, the tab keeps its `?`, and a notice above the bar says a question is waiting. Alt j (or Alt a) shows it again.
 - **Claude's questions:** with a `PreToolUse` hook on `AskUserQuestion`, Claude's questions open as a komux popup in the agent's tab, and the answers go straight back to Claude. Esc falls back to Claude's own dialog.
 - **Sessions:** with `SessionStart` (no matcher) also pointed at the hook, komux knows which conversation each pane holds as soon as it starts. Without it, a pane's conversation is known from its first prompt. `komux claude` uses this to send you to a conversation that is already open.
 - **Background commands as jobs:** with a `PreToolUse` hook on `Bash` (matcher `AskUserQuestion|Bash` covers both), commands Claude runs in the background, such as dev servers and watchers, run as jobs in the agent's tab, named after Claude's description of them. The job starts in the directory and environment of Claude's shell. Claude still reads its output and can stop it; stopping one closes its job. Permission rules and prompts see the command wrapped in `komux job run`, so the komux popup offers no "Always allow" for it.

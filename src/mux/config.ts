@@ -81,13 +81,13 @@ export const configSchema = z
     tabs: z
       .record(z.string(), z.object({ layout: z.string(), cwd: z.string().optional().describe("Working directory; defaults to defaultCwd") }).strict())
       .default({})
-      .describe("Named tabs, opened from Ctrl+t o or komux project like projects"),
+      .describe("Named tabs, opened from the tab switcher or komux project like projects"),
     tray: z.array(trayEntry).default(defaultTray).describe("Widgets on the right of the mode bar, such as { widget: \"clock\" }, { widget: \"system\" }, or { command: [...] }"),
     startup: z.array(z.string()).default([]).describe("Named tabs a new session opens instead of a plain tab"),
     projects: z
       .object({
         roots: z.array(z.string()).default(["~/work/*/*"]),
-        layout: z.string().optional().describe("Layout for tabs opened with Ctrl+t o or komux project"),
+        layout: z.string().optional().describe("Layout for tabs opened from the tab switcher or komux project"),
         layoutFor: z.record(z.string(), z.string()).default({}).describe("Layouts for particular projects, by project name"),
       })
       .default({ roots: ["~/work/*/*"], layoutFor: {} }),

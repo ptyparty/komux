@@ -1,14 +1,16 @@
 import { BoxRenderable, TextRenderable, bg, bold, fg, type CliRenderer, type StyledText } from "@opentui/core";
 import { styled, type Part } from "../ui/styled.ts";
-import { hints, modeHints, type Hint } from "./keymap.ts";
+import { age } from "../claude/sessions.ts";
+import { leaderLabel, type Hint } from "./keymap.ts";
 import { firstLine, fit } from "./fit.ts";
 import { JobsPanel, jobBadge, jobDetail } from "./jobs-panel.ts";
-import { Launcher } from "./launcher.ts";
+import { KeysCard, PaletteCard } from "./keys-card.ts";
+import { Launcher, type EntryLook } from "./launcher.ts";
 import { paneIds, shownPaneTab, type LayoutNode, type PaneId, type TabsNode } from "./layout.ts";
 import type { Pane, PaneChrome } from "./pane.ts";
 import { appColor, card, theme } from "./theme.ts";
 import type { Tray } from "./tray.ts";
-import type { AgentState, CommandState, Workspace } from "./workspace.ts";
+import type { AgentState, CommandState, SwitchEntry, Workspace } from "./workspace.ts";
 
 export class MuxView {
   private readonly body: BoxRenderable;
@@ -18,6 +20,9 @@ export class MuxView {
   private readonly jobsBar: TextRenderable;
   private jobRanges: { start: number; end: number; id: PaneId }[] = [];
   private readonly hintBar: TextRenderable;
+  private readonly keysChip: TextRenderable;
+  private readonly keysCard: KeysCard;
+  private readonly paletteCard: PaletteCard;
   private readonly overlay: BoxRenderable;
   private bodySignature = "";
   private paneTabStrips: { row: BoxRenderable; strip: TextRenderable; group: TabsNode; ranges: { start: number; end: number; id: PaneId }[] }[] = [];
@@ -39,7 +44,14 @@ export class MuxView {
     private readonly workspace: Workspace,
     private readonly panes: Map<PaneId, Pane>,
     private readonly tray: Tray,
-    private readonly actions: { onFocusPane: (id: PaneId) => void; onOpenWidget: (index: number) => void; onOpenJob: (id: PaneId) => void; jobLine: (id: PaneId) => string | undefined },
+    private readonly actions: {
+      onFocusPane: (id: PaneId) => void;
+      onOpenWidget: (index: number) => void;
+      onOpenJob: (id: PaneId) => void;
+      onOpenKeys: () => void;
+      jobLine: (id: PaneId) => string | undefined;
+      conversationTitle: (dir: string) => string | undefined;
+    },
   ) {
     const root = new BoxRenderable(renderer, { flexDirection: "column", width: "100%", height: "100%", backgroundColor: theme.background, paddingLeft: 1, paddingRight: 1 });
     this.body = new BoxRenderable(renderer, { flexGrow: 1, flexDirection: "row", minHeight: 0 });
@@ -58,10 +70,13 @@ export class MuxView {
       const hit = this.jobRanges.find((range) => offset >= range.start && offset < range.end);
       if (hit) this.actions.onOpenJob(hit.id);
     };
+    this.keysChip = new TextRenderable(renderer, { height: 1, flexShrink: 0, wrapMode: "none", bg: theme.surface });
+    this.keysChip.onMouseDown = () => this.actions.onOpenKeys();
     statusRow.add(this.modeBar);
+    statusRow.add(this.keysChip);
     statusRow.add(this.jobsBar);
     statusRow.add(this.trayBar);
-    this.hintBar = new TextRenderable(renderer, { height: 1, flexShrink: 0, wrapMode: "none", fg: theme.muted });
+    this.hintBar = new TextRenderable(renderer, { position: "absolute", left: 1, right: 1, height: 1, zIndex: 155, visible: false, wrapMode: "none", fg: theme.muted, bg: theme.raised });
     this.dock = new TextRenderable(renderer, { flexShrink: 0, wrapMode: "none", visible: false });
     this.dock.onMouseDown = (event) => {
       const id = this.dockJobs[event.y - this.dock.screenY];
@@ -70,7 +85,6 @@ export class MuxView {
     root.add(this.body);
     root.add(this.dock);
     root.add(statusRow);
-    root.add(this.hintBar);
     this.overlay = new BoxRenderable(renderer, {
       position: "absolute",
       left: "10%",
@@ -86,10 +100,13 @@ export class MuxView {
     renderer.root.add(root);
     renderer.root.add(this.drawerBox);
     renderer.root.add(this.overlay);
-    this.toastBox = new BoxRenderable(renderer, { position: "absolute", right: 1, bottom: toastBottom, zIndex: 150, visible: false, flexDirection: "column", alignItems: "flex-end" });
+    this.toastBox = new BoxRenderable(renderer, { position: "absolute", right: 1, bottom: 1, zIndex: 150, visible: false, flexDirection: "column", alignItems: "flex-end" });
     renderer.root.add(this.toastBox);
-    this.launcher = new Launcher(renderer);
+    renderer.root.add(this.hintBar);
+    this.launcher = new Launcher(renderer, (entry) => this.entryLook(entry));
     this.jobsPanel = new JobsPanel(renderer);
+    this.keysCard = new KeysCard(renderer);
+    this.paletteCard = new PaletteCard(renderer);
   }
 
   render(): void {
@@ -107,14 +124,40 @@ export class MuxView {
     this.renderPaneTabStrips();
     this.modeBar.content = this.renderBar();
     this.trayBar.content = this.renderTray();
-    this.jobsBar.content = this.renderJobChips(plainWidth(this.modeBar.content) + plainWidth(this.trayBar.content));
-    this.hintBar.content = this.renderHints();
+    this.keysChip.content = this.renderKeysChip();
+    this.jobsBar.content = this.renderJobChips(plainWidth(this.modeBar.content) + plainWidth(this.keysChip.content) + plainWidth(this.trayBar.content));
     this.launcher.render(this.workspace.prompt);
-    const showJobs = this.workspace.mode === "jobs" && !this.workspace.prompt;
+    this.paletteCard.render(this.workspace.palette, this.workspace.focusedApp());
+    const showJobs = this.workspace.mode === "jobs" && !this.workspace.prompt && !this.workspace.palette;
     this.jobsPanel.render(showJobs ? this.workspace.tabJobs() : undefined, this.workspace.selectedJob, Date.now());
-    this.renderToasts();
     this.renderDock();
+    const above = 1 + (this.dock.visible ? this.dockJobs.length : 0);
+    this.keysCard.render({ mode: this.workspace.mode, leader: this.workspace.leaderCardShown(), app: this.workspace.focusedApp(), bottom: above, lockLeader: this.workspace.lockLeader });
+    const notice = this.renderHints();
+    this.hintBar.visible = notice.chunks.length > 0;
+    this.hintBar.content = notice;
+    this.hintBar.bottom = above + this.keysCard.height;
+    this.toastBox.bottom = above + this.keysCard.height + (this.hintBar.visible ? 1 : 0);
+    this.renderToasts();
     this.renderDrawer(popup);
+  }
+
+  private renderKeysChip(): StyledText {
+    const open = this.workspace.mode === "leader";
+    const paint = (part: Part) => (open ? bg(theme.raised)(part) : part);
+    return styled([paint(fg(open ? theme.accent : theme.text)(` ${leaderLabel}`)), paint(fg(theme.muted)(" keys ")), " "]);
+  }
+
+  private entryLook(entry: SwitchEntry): EntryLook {
+    const detail = this.actions.conversationTitle(entry.dir);
+    if (entry.kind === "tab") {
+      const tab = this.workspace.tabs.find((candidate) => candidate.id === entry.tabId);
+      const state = tab ? this.workspace.tabAttention(tab) : undefined;
+      if (!state) return { detail, aside: "open" };
+      return { badge: agentBadges[state], color: agentColors[state], detail, aside: `Claude ${agentLabels[state]}` };
+    }
+    if (entry.kind === "closed" && entry.at !== undefined) return { detail, aside: closedAge(Date.now() - entry.at) };
+    return { detail, aside: "project" };
   }
 
   private renderDrawer(popup: boolean): void {
@@ -134,7 +177,7 @@ export class MuxView {
     }
     this.drawerTab = tabId;
     if (!pane) return;
-    const below = (this.dock.visible ? this.dockJobs.length : 0) + 2;
+    const below = (this.dock.visible ? this.dockJobs.length : 0) + 1;
     const room = Math.max(this.renderer.height - below, 3);
     const height = drawer.zoomed ? room : Math.max(Math.round((room * drawer.height) / 100), 3);
     this.drawerBox.height = height;
@@ -206,7 +249,6 @@ export class MuxView {
     const jobs = this.workspace.tabJobs().filter((job) => job.dock);
     this.dock.visible = jobs.length > 0;
     this.dockJobs = jobs.map((job) => job.id);
-    this.toastBox.bottom = toastBottom + jobs.length;
     if (jobs.length === 0) return;
     this.dock.height = jobs.length;
     const nameWidth = Math.min(Math.max(...jobs.map((job) => Bun.stringWidth(job.name))), 24);
@@ -513,7 +555,7 @@ export class MuxView {
 
   private renderHints(): StyledText {
     const { prompt, message, mode } = this.workspace;
-    if (prompt) return styled(hintParts([{ keys: "Enter", description: "confirm" }, { keys: "Esc", description: "cancel" }]));
+    if (prompt || this.workspace.palette) return styled([]);
     if (message) return styled([" ", fg(theme.warning)(message)]);
     if (this.workspace.picking) return styled([" ", fg(theme.accent)(this.workspace.picking), "  ", ...hintParts([{ keys: "Alt C", description: "cancel" }]).slice(1)]);
     const hidden = this.workspace.hiddenAsks().length;
@@ -526,12 +568,10 @@ export class MuxView {
     if ((mode === "normal" || mode === "locked") && this.workspace.focusedPaneHeld()) {
       return styled([" ", fg(theme.warning)("Command exited"), "  ", ...hintParts(heldHints).slice(1)]);
     }
-    if (mode === "locked") return styled([" ", fg(theme.muted)("all keys go to the pane"), "    ", ...hintParts(hints(mode)).slice(1)]);
-    return styled(hintParts(mode === "normal" ? [...modeHints(), ...hints(mode)] : hints(mode)));
+    return styled([]);
   }
 }
 
-const toastBottom = 2;
 const dockTag = "docked";
 const slideMs = 90;
 const slideFrameMs = 15;
@@ -559,6 +599,11 @@ function hintParts(list: Hint[]): Part[] {
     parts.push(fg(theme.text)(hint.keys), fg(theme.muted)(` ${hint.description}`));
   });
   return parts;
+}
+
+function closedAge(ms: number): string {
+  const label = age(ms);
+  return label === "1d ago" ? "yesterday" : label === "just now" ? "closed just now" : `${label}`;
 }
 
 function awaitingLabel(jobs: number): string {
