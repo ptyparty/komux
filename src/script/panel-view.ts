@@ -10,9 +10,9 @@ const styleColors: Record<(typeof textStyles)[number], string> = {
   bold: theme.text,
   muted: theme.muted,
   accent: theme.accent,
-  success: "#98bb6c",
+  success: theme.ok,
   warning: theme.warning,
-  error: "#e82424",
+  error: theme.error,
 };
 
 export class PanelView {
@@ -27,10 +27,10 @@ export class PanelView {
     private readonly onEvent: (event: PanelEvent) => void,
   ) {
     this.frame = new BoxRenderable(renderer, {
+      backgroundColor: theme.raised,
       flexDirection: "column",
       width: "100%",
       height: "100%",
-      paddingLeft: 1,
       paddingRight: 1,
     });
     this.scroll = new ScrollBoxRenderable(renderer, { flexGrow: 1, contentOptions: { flexDirection: "column", gap: 1 } });

@@ -10,10 +10,10 @@ import type { Entry, SessionState } from "./transcript.ts";
 type Slot = { root: Renderable; update: (entry: Entry) => void };
 
 const stateLabels: Record<SessionState, [string, string]> = {
-  idle: ["ready", theme.modes.normal],
+  idle: ["ready", theme.ok],
   working: ["working", theme.accent],
   waiting: ["waiting for you", theme.warning],
-  ended: ["ended", theme.modes.locked],
+  ended: ["ended", theme.error],
 };
 
 export const composeKeyBindings = [
@@ -149,11 +149,11 @@ function entryText(entry: Entry) {
     case "user":
       return styled([bold(fg(theme.accent)("› ")), fg(theme.text)(entry.text)]);
     case "tool": {
-      const mark = entry.status === "running" ? fg(theme.muted)(" …") : entry.status === "ok" ? fg(theme.modes.normal)(" ✓") : fg(theme.modes.locked)(" ✗");
+      const mark = entry.status === "running" ? fg(theme.muted)(" …") : entry.status === "ok" ? fg(theme.ok)(" ✓") : fg(theme.error)(" ✗");
       return styled([fg(theme.muted)("▸ "), bold(fg(theme.text)(entry.name)), fg(theme.muted)(`  ${entry.summary}`), mark]);
     }
     case "notice": {
-      const color = entry.tone === "error" ? theme.modes.locked : entry.tone === "warning" ? theme.warning : theme.muted;
+      const color = entry.tone === "error" ? theme.error : entry.tone === "warning" ? theme.warning : theme.muted;
       return styled([fg(color)(entry.text)]);
     }
     case "text":

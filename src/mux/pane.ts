@@ -1,11 +1,11 @@
-import { BoxRenderable, EmbeddedTerminalRenderable, type CliRenderer, type MouseEvent } from "@opentui/core";
+import { BoxRenderable, EmbeddedTerminalRenderable, TextRenderable, type CliRenderer, type MouseEvent, type StyledText } from "@opentui/core";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import { processCwd } from "./process-cwd.ts";
 import { GraphicsScanner, type GraphicsCommand } from "./graphics.ts";
 import type { PaneId } from "./layout.ts";
 import { Pty, type ReadScheduler } from "./pty.ts";
-import { theme } from "./theme.ts";
+import { stripeChars, theme } from "./theme.ts";
 import { wordAt } from "./words.ts";
 
 export type CommandEvent = { kind: "started"; program?: string; commandLine?: string } | { kind: "finished"; code: number };
@@ -19,7 +19,10 @@ export type PaneEvents = {
   onGraphics?: (id: PaneId, command: GraphicsCommand) => void;
   onFinished?: (id: PaneId, code: number | null) => void;
   onOutput?: (id: PaneId, data: Uint8Array) => void;
+  onTitle?: (id: PaneId) => void;
 };
+
+export type PaneChrome = { kind: "strip"; header: StyledText; background: string } | { kind: "bare" } | { kind: "card"; color: string; header?: StyledText };
 
 export type PaneOptions = {
   cwd?: string;
@@ -41,12 +44,17 @@ const clipboardStart = "\x1b]52;";
 const clipboardPending = /\x1b\]52;[^;\x07\x1b]*(?:;[A-Za-z0-9+/=]*\x1b?)?$/;
 const clipboardTailLength = 1024 * 1024;
 const doubleClickMs = 400;
+const titleSet = /\x1b\][02];([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+const titleStart = "\x1b]";
+const titleTailLength = 1024;
 const privateModeSet = /\x1b\[\?([\d;]*)h/g;
 const unfinishedModeSet = /^\x1b(?:\[(?:\?[\d;]*)?)?$/;
 
 export class Pane {
   readonly frame: BoxRenderable;
   private readonly view: EmbeddedTerminalRenderable;
+  private readonly headerRow: BoxRenderable;
+  private readonly header: TextRenderable;
   private pty: Pty;
   private size = { cols: 80, rows: 24 };
   private exitCode: number | null | undefined;
@@ -55,6 +63,10 @@ export class Pane {
   private readonly clipboard = new ClipboardScanner();
   private readonly graphics = new GraphicsScanner();
   private readonly focusMode = new FocusModeScanner();
+  private readonly titles = new TitleScanner();
+  private program: string | undefined;
+  private programTitle: string | undefined;
+  private background: string = theme.background;
   private lastClick = { at: 0, x: -1, y: -1 };
 
   constructor(
@@ -66,7 +78,9 @@ export class Pane {
   ) {
     this.view = new EmbeddedTerminalRenderable(renderer, {
       width: "100%",
-      height: "100%",
+      flexGrow: 1,
+      flexBasis: 0,
+      minHeight: 0,
       selectable: true,
       maxScrollback: options.scrollbackBytes,
       onMouseDown: (event) => this.clicked(event),
@@ -76,16 +90,21 @@ export class Pane {
         this.syncSize();
       },
     });
-    const border = options.frameless ? {} : { border: true, borderStyle: "rounded" as const, borderColor: theme.border, titleColor: theme.muted };
     this.frame = new BoxRenderable(renderer, {
-      ...border,
+      customBorderChars: stripeChars,
       backgroundColor: theme.background,
+      flexDirection: "column",
       width: "100%",
       height: "100%",
       overflow: "hidden",
       onMouseDown: () => events.onClick(id),
     });
+    this.headerRow = new BoxRenderable(renderer, { height: 1, flexShrink: 0, visible: false });
+    this.header = new TextRenderable(renderer, { flexGrow: 1, wrapMode: "none" });
+    this.headerRow.add(this.header);
+    this.frame.add(this.headerRow);
     this.frame.add(this.view);
+    this.view.write(defaultBackground(this.background));
     this.pty = this.start(options.command);
     this.syncSize();
   }
@@ -106,17 +125,30 @@ export class Pane {
     return processCwd(this.pty.child.pid) ?? this.options.cwd;
   }
 
-  label(name: string | undefined): string {
-    const base = name ?? this.command?.join(" ") ?? this.directoryLabel();
-    if (this.exitCode === undefined) return base;
-    return `${base} · exited${this.exitCode === null ? "" : ` ${this.exitCode}`}`;
+  get name(): string {
+    return basename(this.program ?? this.command?.[0] ?? shellCommand()[0]!);
   }
 
-  show(title: string, focused: boolean, focusColor: string = theme.accent): void {
-    if (!this.options.frameless) {
-      this.frame.title = ` ${title} `;
-      this.frame.borderColor = focused ? focusColor : theme.border;
-      this.frame.titleColor = this.exited ? theme.warning : focused ? focusColor : theme.muted;
+  get title(): string {
+    return this.programTitle ?? this.directoryLabel();
+  }
+
+  get frameless(): boolean {
+    return this.options.frameless ?? false;
+  }
+
+  show(chrome: PaneChrome, focused: boolean): void {
+    const card = chrome.kind === "card";
+    const header = chrome.kind === "strip" ? chrome.header : chrome.kind === "card" ? chrome.header : undefined;
+    this.frame.border = card ? ["left"] : false;
+    if (card) this.frame.borderColor = chrome.color;
+    this.frame.backgroundColor = card ? theme.raised : theme.background;
+    this.paint(card ? theme.raised : theme.background);
+    this.frame.paddingLeft = card && header ? 1 : 0;
+    this.headerRow.visible = header !== undefined;
+    if (header) {
+      this.header.content = header;
+      this.headerRow.backgroundColor = chrome.kind === "strip" ? chrome.background : theme.raised;
     }
     if (focused) {
       this.view.focus();
@@ -162,9 +194,17 @@ export class Pane {
 
   private restartWith(command: string[] | undefined): void {
     this.exitCode = undefined;
-    this.view.write(resetTerminal);
+    this.program = undefined;
+    this.programTitle = undefined;
+    this.view.write(resetTerminal + defaultBackground(this.background));
     this.pty = this.start(command);
     this.syncSize();
+  }
+
+  private paint(background: string): void {
+    if (background === this.background) return;
+    this.background = background;
+    this.view.write(defaultBackground(background));
   }
 
   private start(command: string[] | undefined): Pty {
@@ -179,7 +219,12 @@ export class Pane {
         this.view.write(data);
         if (this.focusMode.scan(data)) this.pty.write(this.view.focused ? "\x1b[I" : "\x1b[O");
         this.events.onOutput?.(this.id, data);
-        if (this.events.onCommand) this.scanCommandMarks(data);
+        this.scanCommandMarks(data);
+        const title = this.titles.scan(data);
+        if (title !== undefined && title !== this.programTitle) {
+          this.programTitle = title === "" ? undefined : title;
+          this.events.onTitle?.(this.id);
+        }
         for (const text of this.clipboard.scan(data)) this.events.onClipboard?.(this.id, text);
         if (this.events.onGraphics) for (const command of this.graphics.scan(data)) this.events.onGraphics(this.id, command);
       },
@@ -233,7 +278,9 @@ export class Pane {
     const text = this.markTail + Buffer.from(data).toString("latin1");
     for (const match of text.matchAll(commandMark)) {
       if (match.index! + match[0].length <= this.markTail.length) continue;
-      this.events.onCommand?.(this.id, match[1] === "C" ? { kind: "started", program: programOf(match[2]), commandLine: commandLineOf(match[2]) } : { kind: "finished", code: Number(match[2] ?? 0) });
+      const started = match[1] === "C";
+      this.program = started ? programOf(match[2]) : undefined;
+      this.events.onCommand?.(this.id, started ? { kind: "started", program: this.program, commandLine: commandLineOf(match[2]) } : { kind: "finished", code: Number(match[2] ?? 0) });
     }
     this.markTail = text.slice(-markTailLength);
   }
@@ -259,6 +306,24 @@ export class FocusModeScanner {
     const pending = text.lastIndexOf("\x1b");
     this.tail = pending >= scanned && unfinishedModeSet.test(text.slice(pending)) ? text.slice(pending) : "";
     return enabled;
+  }
+}
+
+export class TitleScanner {
+  private tail = "";
+
+  scan(data: Uint8Array): string | undefined {
+    const text = this.tail + Buffer.from(data).toString("latin1");
+    let title: string | undefined;
+    let scanned = 0;
+    for (const match of text.matchAll(titleSet)) {
+      scanned = match.index! + match[0].length;
+      title = Buffer.from(match[1]!, "latin1").toString("utf8");
+    }
+    const pending = text.lastIndexOf(titleStart);
+    const unfinished = pending >= scanned && text.length - pending <= titleTailLength && /^\x1b\](?:[02](?:;[^\x07\x1b]*\x1b?)?)?$/.test(text.slice(pending));
+    this.tail = unfinished ? text.slice(pending) : text.endsWith("\x1b") ? "\x1b" : "";
+    return title;
   }
 }
 
@@ -296,6 +361,10 @@ export function commandLineOf(params: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function defaultBackground(color: string): string {
+  return `\x1b]11;${color}\x07`;
 }
 
 function shellCommand(): string[] {

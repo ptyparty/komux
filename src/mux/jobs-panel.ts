@@ -1,6 +1,6 @@
 import { BoxRenderable, TextRenderable, bg, bold, fg, type CliRenderer } from "@opentui/core";
 import { styled, type Part } from "../ui/styled.ts";
-import { theme } from "./theme.ts";
+import { card, theme } from "./theme.ts";
 import type { Job } from "./workspace.ts";
 
 export class JobsPanel {
@@ -15,16 +15,13 @@ export class JobsPanel {
       width: "60%",
       zIndex: 200,
       visible: false,
-      border: true,
-      borderStyle: "rounded",
-      borderColor: theme.modes.jobs,
-      titleColor: theme.modes.jobs,
-      backgroundColor: theme.surface,
+      ...card(theme.modes.jobs),
       flexDirection: "column",
       paddingLeft: 1,
       paddingRight: 1,
-      title: " Jobs ",
+      paddingBottom: 1,
     });
+    this.box.add(new TextRenderable(renderer, { content: styled([bold(fg(theme.text)("Jobs"))]), height: 1, wrapMode: "none" }));
     this.rows = new TextRenderable(renderer, { wrapMode: "none" });
     this.box.add(this.rows);
     renderer.root.add(this.box);
