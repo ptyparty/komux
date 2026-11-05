@@ -77,7 +77,7 @@ komux takes one key from the programs in its panes, **Ctrl Space**, plus a handf
 
 | Without the leader | |
 |---|---|
-| Alt h / t / n / s | focus the pane left, up, down, right; left of the leftmost pane goes to the previous tab, right of the rightmost to the next (it doesn't wrap) |
+| Alt h / t / n / s | focus the pane left, up, down, right |
 | Alt 1–9 | go to tab N |
 | Alt o / e | previous / next pane |
 | Alt c, Alt C | message Claude, with what you're looking at |
