@@ -29,6 +29,7 @@ export class MuxView {
   private readonly launcher: Launcher;
   private readonly jobsPanel: JobsPanel;
   private readonly toastBox: BoxRenderable;
+  private toastCards: { box: BoxRenderable; text: TextRenderable; target: PaneId }[] = [];
   private readonly dock: TextRenderable;
   private dockJobs: PaneId[] = [];
   private overlayPane: PaneId | undefined;
@@ -286,10 +287,10 @@ export class MuxView {
   private renderToasts(): void {
     const toasts = this.workspace.toasts();
     this.toastBox.visible = toasts.length > 0;
-    for (const child of this.toastBox.getChildren()) child.destroyRecursively();
+    for (const unused of this.toastCards.splice(toasts.length)) unused.box.destroyRecursively();
     if (toasts.length === 0) return;
     const maxWidth = Math.floor(this.renderer.width * 0.6);
-    for (const toast of toasts) {
+    toasts.forEach((toast, index) => {
       const look = this.toastLook(toast);
       const target = toast.kind === "job" ? toast.job.id : toast.id;
       const width = Math.min(Math.max(Bun.stringWidth(look.title) + Bun.stringWidth(look.aside) + 2, Bun.stringWidth(look.detail), Bun.stringWidth(look.keys)) + 3, maxWidth);
@@ -297,14 +298,26 @@ export class MuxView {
       const gap = Math.max(room - Bun.stringWidth(look.title) - Bun.stringWidth(look.aside), 1);
       const lines: Part[] = [bold(fg(look.color)(fit(look.title, room))), fg(theme.muted)(`${" ".repeat(gap)}${look.aside}`), "\n", fg(look.dim ? theme.muted : theme.text)(fit(look.detail, room))];
       if (look.keys) lines.push("\n", fg(theme.muted)(fit(look.keys, room)));
-      const box = new BoxRenderable(this.renderer, { ...card(look.color), width, flexShrink: 0, paddingLeft: 1, paddingRight: 1 });
-      box.onMouseDown = () => {
-        if (this.workspace.jobStatus(target)) this.actions.onOpenJob(target);
-        else this.actions.onFocusPane(target);
-      };
-      box.add(new TextRenderable(this.renderer, { wrapMode: "none", content: styled(lines) }));
-      this.toastBox.add(box);
-    }
+      const shown = this.toastCards[index] ?? this.addToastCard();
+      shown.target = target;
+      shown.box.width = width;
+      shown.box.borderColor = look.color;
+      shown.text.content = styled(lines);
+    });
+  }
+
+  private addToastCard(): { box: BoxRenderable; text: TextRenderable; target: PaneId } {
+    const box = new BoxRenderable(this.renderer, { ...card(theme.accent), flexShrink: 0, paddingLeft: 1, paddingRight: 1 });
+    const text = new TextRenderable(this.renderer, { wrapMode: "none" });
+    const shown = { box, text, target: 0 };
+    box.onMouseDown = () => {
+      if (this.workspace.jobStatus(shown.target)) this.actions.onOpenJob(shown.target);
+      else this.actions.onFocusPane(shown.target);
+    };
+    box.add(text);
+    this.toastBox.add(box);
+    this.toastCards.push(shown);
+    return shown;
   }
 
   private toastLook(toast: ReturnType<Workspace["toasts"]>[number]): { title: string; aside: string; detail: string; keys: string; color: string; dim?: boolean } {

@@ -2,9 +2,11 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { komuxStateDir } from "../claude/hooks-setup.ts";
 import { pastSessions, projectDir } from "../claude/sessions.ts";
-import type { RecentTab } from "./workspace.ts";
+import { openedKey, type RecentTab } from "./workspace.ts";
 
 const describeTtlMs = 60_000;
+const keptRecentTabs = 40;
+const saveDelayMs = 1000;
 
 export function recentTabsPath(): string {
   return join(komuxStateDir(), "recent-tabs.json");
@@ -41,6 +43,43 @@ export function saveRecentTabs(tabs: RecentTab[], path = recentTabsPath()): void
   } catch {
     return;
   }
+}
+
+export class RecentTabs {
+  private readonly pending = new Map<string, RecentTab>();
+  private timer: Timer | undefined;
+
+  constructor(
+    private readonly path = recentTabsPath(),
+    private readonly delayMs = saveDelayMs,
+  ) {}
+
+  list(): RecentTab[] {
+    return mergeRecentTabs(loadRecentTabs(this.path), [...this.pending.values()]);
+  }
+
+  remember(tab: RecentTab): void {
+    this.pending.set(openedKey(tab), tab);
+    this.timer ??= setTimeout(() => this.flush(), this.delayMs);
+  }
+
+  flush(): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    if (this.pending.size === 0) return;
+    saveRecentTabs(this.list(), this.path);
+    this.pending.clear();
+  }
+}
+
+export function mergeRecentTabs(...lists: RecentTab[][]): RecentTab[] {
+  const newest = new Map<string, RecentTab>();
+  for (const tab of lists.flat()) {
+    const key = openedKey(tab);
+    const kept = newest.get(key);
+    if (!kept || tab.at >= kept.at) newest.set(key, tab);
+  }
+  return [...newest.values()].sort((a, b) => b.at - a.at).slice(0, keptRecentTabs);
 }
 
 export class ConversationTitles {

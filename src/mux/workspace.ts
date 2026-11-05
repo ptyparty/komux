@@ -56,7 +56,6 @@ const keptFinishedJobs = 5;
 const keptReplies = 10;
 const drawerHeights = { initial: 40, step: 10, min: 20, max: 80 };
 const leaderDelayMs = 300;
-const keptRecentTabs = 40;
 
 export type Prompt = {
   kind: "rename-tab" | "rename-pane" | "close-tab" | "restart-tab" | "switch" | "run-job";
@@ -97,7 +96,7 @@ export interface PaneHost {
   askKeys(id: PaneId): void;
   sendKeys(id: PaneId, data: string): void;
   recentTabs(): RecentTab[];
-  saveRecentTabs(tabs: RecentTab[]): void;
+  rememberTab(tab: RecentTab): void;
 }
 
 export type InputKey = Key & { sequence: string };
@@ -145,7 +144,6 @@ export class Workspace {
   private leaderAt = Number.NEGATIVE_INFINITY;
   private leaderForced = false;
   lockLeader = false;
-  private recent: RecentTab[];
 
   constructor(
     private readonly host: PaneHost,
@@ -153,7 +151,6 @@ export class Workspace {
     private readonly config: Config = defaultConfig,
     private readonly now: () => number = Date.now,
   ) {
-    this.recent = host.recentTabs();
     const startup = namedTabs(config).filter((tab) => config.startup.includes(tab.name));
     startup.sort((a, b) => config.startup.indexOf(a.name) - config.startup.indexOf(b.name));
     if (startup.length === 0) this.openTab(initialCwd);
@@ -272,10 +269,7 @@ export class Workspace {
 
   private remember(tab: Tab): void {
     if (!tab.opened) return;
-    const entry: RecentTab = { ...tab.opened, title: tab.name, at: this.now() };
-    const key = recentKey(entry);
-    this.recent = [entry, ...this.recent.filter((kept) => recentKey(kept) !== key)].slice(0, keptRecentTabs);
-    this.host.saveRecentTabs(this.recent);
+    this.host.rememberTab({ ...tab.opened, title: tab.name, at: this.now() });
   }
 
   leaderCardShown(): boolean {
@@ -296,6 +290,7 @@ export class Workspace {
 
   private enterLeader(): void {
     this.mode = "leader";
+    this.lockLeader = false;
     this.leaderAt = this.now();
     this.leaderForced = false;
     this.askKeys();
@@ -308,12 +303,14 @@ export class Workspace {
 
   setAppKeys(pane: PaneId, keys: AppKeys | undefined): void {
     if (pane !== this.focused) return;
-    this.appKeys = keys ? { pane, keys } : undefined;
+    this.appKeys = keys && keys.groups.length > 0 ? { pane, keys } : undefined;
     const palette = this.palette;
     if (!palette || palette.scope) return;
+    const selected = palette.matches[palette.selected];
     palette.entries = paletteEntries(undefined, this.appKeys);
     palette.matches = rankEntries(palette.text, palette.entries);
-    palette.selected = Math.min(palette.selected, Math.max(palette.matches.length - 1, 0));
+    const kept = selected ? palette.matches.findIndex((entry) => sameEntry(entry, selected)) : -1;
+    palette.selected = kept >= 0 ? kept : 0;
   }
 
   focusedApp(): AppKeys | undefined {
@@ -833,16 +830,16 @@ export class Workspace {
       this.editPrompt(key);
       return true;
     }
-    if (this.mode === "locked") return this.lockedKey(key);
     const popup = this.popup;
-    const finishedJob = popup?.kind === "job" && this.jobStatus(popup.id)?.state !== "running";
-    if (finishedJob && this.mode === "normal" && !popupPassthrough.has(keyName(key))) {
-      return this.finishedJobKey(popup!.id, key);
-    }
     if (popup?.kind === "view" && this.host.isHeld(popup.id)) {
       this.host.destroy(popup.id);
       this.popupExited(popup.id);
       return true;
+    }
+    if (this.mode === "locked") return this.lockedKey(key);
+    const finishedJob = popup?.kind === "job" && this.jobStatus(popup.id)?.state !== "running";
+    if (finishedJob && this.mode === "normal" && !popupPassthrough.has(keyName(key))) {
+      return this.finishedJobKey(popup!.id, key);
     }
     if (popup && this.mode === "normal" && !popupPassthrough.has(keyName(key))) return false;
     const binding = lookup(this.mode, key);
@@ -1192,13 +1189,16 @@ export class Workspace {
       .filter(({ tab }) => tab !== current)
       .sort((a, b) => b.tab.focusedAt - a.tab.focusedAt)
       .map(({ tab, index }): SwitchEntry => ({ kind: "tab", name: tab.name, dir: tab.cwd ?? this.host.cwd(tab.layoutFocus) ?? "", tabId: tab.id, number: index + 1, at: tab.focusedAt, opened: tab.opened }));
-    const openNames = new Set(this.tabs.map((tab) => tab.name));
-    const closed = this.recent
-      .filter((recent) => !openNames.has(recent.title))
+    const openKeys = new Set(this.tabs.flatMap((tab) => (tab.opened ? [openedKey(tab.opened)] : [])));
+    const closed = this.host
+      .recentTabs()
+      .filter((recent) => !openKeys.has(openedKey(recent)))
+      .sort((a, b) => b.at - a.at)
       .map((recent): SwitchEntry => ({ kind: "closed", name: recent.title, dir: recent.project.dir, at: recent.at, opened: { project: recent.project, args: recent.args } }));
-    const listed = new Set([...openNames, ...closed.map((entry) => entry.name)]);
+    const listedNames = new Set([...this.tabs.map((tab) => tab.name), ...closed.map((entry) => entry.name)]);
+    const listedKeys = new Set([...openKeys, ...closed.map((entry) => openedKey(entry.opened!))]);
     const projects = this.projects()
-      .filter((project) => !listed.has(project.name))
+      .filter((project) => !listedNames.has(project.name) && !listedKeys.has(openedKey({ project })))
       .map((project): SwitchEntry => ({ kind: "project", name: project.name, dir: project.dir, opened: { project } }));
     return [...open, ...closed, ...projects];
   }
@@ -1430,7 +1430,7 @@ export class Workspace {
     switch (prompt.kind) {
       case "rename-tab":
         if (text) this.tab.name = text;
-        return;
+        return this.remember(this.tab);
       case "rename-pane":
         if (text) this.paneNames.set(this.focused, text);
         else this.paneNames.delete(this.focused);
@@ -1503,8 +1503,13 @@ function rankSwitch(query: string, entries: SwitchEntry[]): SwitchEntry[] {
     .map(({ entry }) => entry);
 }
 
-function recentKey(recent: RecentTab): string {
-  return recent.title;
+function sameEntry(a: PaletteEntry, b: PaletteEntry): boolean {
+  return a.app === b.app && a.name === b.name && a.keys === b.keys;
+}
+
+export function openedKey(opened: Opened): string {
+  const { name, dir, layout } = opened.project;
+  return JSON.stringify([name, dir, layout ?? null, Object.entries(opened.args ?? {}).sort()]);
 }
 
 function showKeyName(key: Key): string {
