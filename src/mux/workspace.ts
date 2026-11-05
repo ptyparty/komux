@@ -1,4 +1,4 @@
-import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId, type Rect } from "./layout.ts";
+import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId } from "./layout.ts";
 import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type LayoutEntry, type LayoutSpec } from "./config.ts";
 import { keyName, leaderKey, lookup, type Binding, type Command, type Key, type Mode } from "./keymap.ts";
 import type { AppKeys } from "./context.ts";
@@ -1024,7 +1024,7 @@ export class Workspace {
       case "switcher":
         return this.openSwitcher();
       case "focus":
-        return this.moveFocus(command.direction, command.spill);
+        return this.moveFocus(command.direction);
       case "swap-pane": {
         if (this.drawerOf()) return;
         const target = neighbor(this.tab.root, this.tab.layoutFocus, command.direction);
@@ -1170,33 +1170,14 @@ export class Workspace {
     }
   }
 
-  private moveFocus(direction: Direction, spill = false): void {
+  private moveFocus(direction: Direction): void {
     const tab = this.tab;
     if (this.drawerOf(tab)) {
       if (direction === "up") this.leaveDrawer(tab);
       return;
     }
     const target = neighbor(tab.root, tab.layoutFocus, direction);
-    if (target !== undefined) return void Object.assign(tab, { layoutFocus: target, zoomed: false });
-    if (spill && (direction === "left" || direction === "right")) this.spillTo(direction, paneRects(tab.root).get(tab.layoutFocus));
-  }
-
-  private spillTo(direction: "left" | "right", from: Rect | undefined): void {
-    const next = this.active + (direction === "left" ? -1 : 1);
-    if (next < 0 || next >= this.tabs.length) return;
-    this.active = next;
-    const tab = this.tab;
-    this.leaveDrawer(tab);
-    if (tab.zoomed) return;
-    const rects = [...paneRects(tab.root)];
-    const edge = (rect: Rect) => (direction === "left" ? rect.x + rect.width : -rect.x);
-    const outermost = Math.max(...rects.map(([, rect]) => edge(rect)));
-    const candidates = rects.filter(([, rect]) => Math.abs(edge(rect) - outermost) < 1e-9);
-    if (candidates.some(([id]) => id === tab.layoutFocus)) return;
-    const middle = (rect: Rect) => rect.y + rect.height / 2;
-    const level = from ? middle(from) : 0.5;
-    candidates.sort(([, a], [, b]) => Math.abs(middle(a) - level) - Math.abs(middle(b) - level));
-    if (candidates[0]) tab.layoutFocus = candidates[0][0];
+    if (target !== undefined) Object.assign(tab, { layoutFocus: target, zoomed: false });
   }
 
   private openSwitcher(): void {

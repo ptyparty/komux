@@ -1886,21 +1886,16 @@ describe("scripts", () => {
 describe("tab switching", () => {
   const ide = configSchema.parse({ projects: { layout: "ide" }, layouts: { ide: { row: [{ focus: true }, {}] } } });
 
-  test("Alt h at the leftmost pane goes to the previous tab's rightmost pane, and Alt s spills right without wrapping", () => {
+  test("Alt h and Alt s at the outermost panes stay on the tab", () => {
     const workspace = new Workspace(new FakeHost(), "/home", ide);
     workspace.openProject("merlin");
     workspace.openProject("penguin");
-    expect(workspace.tabs.map((tab) => tab.name)).toEqual(["Tab #1", "merlin", "penguin"]);
-    press(workspace, "alt+h");
-    expect([workspace.tab.name, workspace.focused]).toEqual(["merlin", 3]);
+    const focused = workspace.focused;
     press(workspace, "alt+h", "alt+h");
-    expect(workspace.tab.name).toBe("Tab #1");
-    press(workspace, "alt+h");
-    expect(workspace.tab.name).toBe("Tab #1");
-    press(workspace, "alt+s");
-    expect([workspace.tab.name, workspace.focused]).toEqual(["merlin", 2]);
-    press(workspace, "alt+s", "alt+s", "alt+s", "alt+s");
-    expect([workspace.tab.name, workspace.focused]).toEqual(["penguin", 5]);
+    expect(workspace.tab.name).toBe("penguin");
+    press(workspace, "alt+s", "alt+s", "alt+s");
+    expect(workspace.tab.name).toBe("penguin");
+    expect(workspace.focused).not.toBe(focused);
   });
 
   test("Alt 1 to 9 go straight to a tab", () => {

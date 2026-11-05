@@ -7,7 +7,7 @@ export type Command =
   | { type: "pass" }
   | { type: "palette" }
   | { type: "switcher" }
-  | { type: "focus"; direction: Direction; spill?: boolean }
+  | { type: "focus"; direction: Direction }
   | { type: "cycle-pane"; delta: number }
   | { type: "swap-pane"; direction: Direction }
   | { type: "new-pane"; axis?: Axis }
@@ -85,7 +85,7 @@ export const keymap: Record<Mode, ModeKeys> = {
     about: "keys go to the pane",
     bindings: [
       { keys: [leaderKey], command: { type: "mode", mode: "leader" } },
-      ...directional(dvorak, "alt+", "focus", (direction) => ({ type: "focus", direction, spill: true })),
+      ...directional(dvorak, "alt+", "focus", (direction) => ({ type: "focus", direction })),
       ...goToTabs("alt+"),
       { keys: ["alt+o"], command: { type: "cycle-pane", delta: -1 }, name: "previous pane" },
       { keys: ["alt+e"], command: { type: "cycle-pane", delta: 1 }, name: "next pane" },
