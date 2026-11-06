@@ -34,7 +34,7 @@ describe("Claude sessions", () => {
     expect(await pastSessions(dir, 1)).toHaveLength(1);
   });
 
-  test("the picker lists sessions open in komux, then ones running elsewhere, then New, then the past", () => {
+  test("the picker leads with New and the past, and lists sessions open elsewhere last", () => {
     const items = pickerItems({
       live: [
         { paneId: 4, sessionId: "a", tab: "merlin" },
@@ -52,10 +52,10 @@ describe("Claude sessions", () => {
       now: 3 * 3_600_000,
     });
     expect(items.map((item) => [item.label, item.detail, item.choice])).toEqual([
-      ["Alpha", "open in merlin · go there", { kind: "focus", paneId: 4, sessionId: "a" }],
-      ["named", "running in another terminal · open here too", { kind: "resume", sessionId: "b" }],
       ["New conversation", "start fresh", { kind: "new" }],
       ["Gamma", "1h ago · › hi there", { kind: "resume", sessionId: "c" }],
+      ["Alpha", "open in merlin · switch to it, this tab keeps its Claude", { kind: "focus", paneId: 4, sessionId: "a" }],
+      ["named", "running in another terminal · open here too", { kind: "resume", sessionId: "b" }],
     ]);
   });
 
