@@ -929,6 +929,14 @@ export class Workspace {
     this.selectFocusedTabs();
   }
 
+  zoomPane(id: PaneId, zoomed: boolean): boolean | undefined {
+    if (this.focused !== id) return undefined;
+    const target = this.drawerOf() ?? this.tab;
+    const was = target.zoomed;
+    target.zoomed = zoomed;
+    return was;
+  }
+
   openProject(target: string | { repo: string }, withJobs = true, choice: { layout?: string; args?: Record<string, string> } = {}): string | undefined {
     const project =
       typeof target === "string" ? resolveTarget(target.trim(), this.host.cwd(this.focused) ?? process.cwd(), this.projects()) : findRepo(target.repo, this.host.projects());
