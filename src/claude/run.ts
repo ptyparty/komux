@@ -239,11 +239,11 @@ function showIfJob(): Promise<void> {
   return ownPaneControl((paneId) => ({ method: "pane.focus", params: { paneId, onlyJob: true } }));
 }
 
-async function focusPane(paneId: number, { keepOwn = false } = {}): Promise<boolean> {
+async function focusPane(paneId: number): Promise<boolean> {
   const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
   if (!control) return false;
   const own = Number(pane);
-  const closing = Number.isInteger(own) && !keepOwn && !startedFromShell() ? own : undefined;
+  const closing = Number.isInteger(own) && !runningAsJob() && !startedFromShell() ? own : undefined;
   try {
     return (await sendControl(control, { method: "pane.focus", params: { paneId, closing } }, 1000)).ok;
   } catch (error) {
@@ -278,10 +278,13 @@ async function wakeAndChoose(renderer: CliRenderer, inbox: Inbox): Promise<Choic
       setupOffered = true;
     }
     const choice = await chooseSession(renderer);
-    if (choice && choice.kind !== "focus") return choice;
+    if (choice?.kind !== "focus") {
+      if (choice) return choice;
+      await hideOwnJob();
+      continue;
+    }
+    if (!(await focusPane(choice.paneId))) return { kind: "resume", sessionId: choice.sessionId };
     await hideOwnJob();
-    if (choice && (await focusPane(choice.paneId, { keepOwn: true }))) continue;
-    if (choice) return { kind: "resume", sessionId: choice.sessionId };
   }
 }
 

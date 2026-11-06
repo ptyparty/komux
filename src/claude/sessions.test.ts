@@ -43,6 +43,7 @@ describe("Claude sessions", () => {
       running: [
         { sessionId: "a", kind: "interactive" },
         { sessionId: "b", name: "named", kind: "interactive" },
+        { sessionId: "b", name: "named", kind: "interactive" },
       ],
       past: [
         { sessionId: "a", title: "Alpha", modified: 0 },
@@ -54,7 +55,7 @@ describe("Claude sessions", () => {
     expect(items.map((item) => [item.label, item.detail, item.choice])).toEqual([
       ["New conversation", "start fresh", { kind: "new" }],
       ["Gamma", "1h ago · › hi there", { kind: "resume", sessionId: "c" }],
-      ["Alpha", "open in merlot · switch to it, this tab keeps its Claude", { kind: "focus", paneId: 4, sessionId: "a" }],
+      ["Alpha", "open in merlot · switch to it", { kind: "focus", paneId: 4, sessionId: "a" }],
       ["named", "running in another terminal · open here too", { kind: "resume", sessionId: "b" }],
     ]);
   });
