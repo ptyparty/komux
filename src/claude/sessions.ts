@@ -135,21 +135,18 @@ export function pickerItems(input: { live: LiveSession[]; running: RunningSessio
   const known = new Set(input.known);
   const past = new Map(input.past.map((session) => [session.sessionId, session]));
   const title = (sessionId: string, fallback?: string) => past.get(sessionId)?.title ?? fallback ?? sessionId.slice(0, 8);
-  const listed = new Set<string>();
-  const items: PickerItem[] = [];
-  for (const session of input.live.filter((live) => known.has(live.sessionId))) {
-    listed.add(session.sessionId);
-    items.push({ label: title(session.sessionId), detail: `open in ${session.tab} · go there`, choice: { kind: "focus", paneId: session.paneId, sessionId: session.sessionId } });
-  }
-  for (const session of input.running.filter((running) => !listed.has(running.sessionId))) {
-    listed.add(session.sessionId);
-    items.push({ label: title(session.sessionId, session.name), detail: "running in another terminal · open here too", choice: { kind: "resume", sessionId: session.sessionId } });
-  }
-  items.push({ label: "New conversation", detail: "start fresh", choice: { kind: "new" } });
-  for (const session of input.past.filter((past) => !listed.has(past.sessionId))) {
+  const live = input.live.filter((session) => known.has(session.sessionId));
+  const running = input.running.filter((session) => !live.some((open) => open.sessionId === session.sessionId));
+  const elsewhere = new Set([...live, ...running].map((session) => session.sessionId));
+  const items: PickerItem[] = [{ label: "New conversation", detail: "start fresh", choice: { kind: "new" } }];
+  for (const session of input.past.filter((past) => !elsewhere.has(past.sessionId))) {
     const prompt = session.lastPrompt ? ` · › ${oneLine(session.lastPrompt, 100)}` : "";
     items.push({ label: title(session.sessionId), detail: `${age(input.now - session.modified)}${prompt}`, choice: { kind: "resume", sessionId: session.sessionId } });
   }
+  for (const session of live)
+    items.push({ label: title(session.sessionId), detail: `open in ${session.tab} · switch to it, this tab keeps its Claude`, choice: { kind: "focus", paneId: session.paneId, sessionId: session.sessionId } });
+  for (const session of running)
+    items.push({ label: title(session.sessionId, session.name), detail: "running in another terminal · open here too", choice: { kind: "resume", sessionId: session.sessionId } });
   return items;
 }
 
