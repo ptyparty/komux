@@ -15,9 +15,10 @@ import { ClaudeView, composeKeyBindings } from "./view.ts";
 import { leaveCommand, parseCommands, type Leave, type SlashCommand } from "./commands.ts";
 import { freshArgs } from "./options.ts";
 import { SlashCompletion } from "./completion.ts";
-import { deliver } from "./inbox.ts";
+import { deliver, draftSocketPath } from "./inbox.ts";
 import type { Attachment } from "../mux/context.ts";
 import { styled } from "../ui/styled.ts";
+import { DraftWatch } from "./draft.ts";
 
 export async function runClaude(args: string[], options: { pick: boolean }): Promise<void> {
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
@@ -40,6 +41,7 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
         dormant: true,
         commands: () => session?.commands ?? [],
         mode: () => session?.transcript.mode,
+        session: () => session?.transcript.sessionId,
         cycleMode: () => {
           session?.cycleMode();
           return session?.transcript.mode;
@@ -79,6 +81,7 @@ export async function runClaude(args: string[], options: { pick: boolean }): Pro
     inbox ??= await openInbox((text) => (deliverTo ? deliverTo(text) : queued.push(text)), {
       commands: () => session?.commands ?? [],
       mode: () => session?.transcript.mode,
+      session: () => session?.transcript.sessionId,
       cycleMode: () => {
         session?.cycleMode();
         return session?.transcript.mode;
@@ -329,7 +332,7 @@ function requestCompose(): Promise<void> {
 
 async function openInbox(
   onText: (text: string) => void,
-  options: { dormant?: boolean; commands?: () => SlashCommand[]; mode?: () => string | undefined; cycleMode?: () => string | undefined; wokenAgain?: () => void } = {},
+  options: { dormant?: boolean; commands?: () => SlashCommand[]; mode?: () => string | undefined; session?: () => string | undefined; cycleMode?: () => string | undefined; wokenAgain?: () => void } = {},
 ): Promise<Inbox | undefined> {
   const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane, KOMUX_TAB_DIR: dir } = process.env;
   const paneId = Number(pane);
@@ -348,7 +351,7 @@ async function openInbox(
           try {
             const { text, wake: woken, commands, cycleMode } = JSON.parse(line) as { text?: unknown; wake?: unknown; commands?: unknown; cycleMode?: unknown };
             if (cycleMode === true) socket.write(`${JSON.stringify({ mode: options.cycleMode?.() })}\n`);
-            else if (commands === true) socket.write(`${JSON.stringify({ commands: options.commands?.() ?? [], mode: options.mode?.() })}\n`);
+            else if (commands === true) socket.write(`${JSON.stringify({ commands: options.commands?.() ?? [], mode: options.mode?.(), session: options.session?.() })}\n`);
             else if (woken === true) (wake ?? options.wokenAgain)?.();
             else if (typeof text === "string" && text.trim()) onText(text.trim());
           } catch {}
@@ -391,10 +394,55 @@ async function openInbox(
 export async function runCompose(socket: string, name: string, source?: { file: string; label?: string }): Promise<void> {
   const attachments = source ? await readAttachments(source) : [];
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
-  const message = await composeMessage(renderer, name, () => fetchInbox(socket), () => askInbox(socket, { cycleMode: true }), attachments);
+  await composeMessage(renderer, name, {
+    load: () => askInbox(socket, { commands: true }),
+    cycleMode: () => askInbox(socket, { cycleMode: true }),
+    send: (message) => deliver(socket, withContext(message.attachments, message.text)),
+    hide: hideOwnPopup,
+    listen: listenForAttachments,
+    attached: attachments,
+  });
   renderer.destroy();
   await renderer.closed;
-  if (message) await deliver(socket, withContext(message.attachments, message.text));
+}
+
+async function hideOwnPopup(): Promise<boolean> {
+  const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane } = process.env;
+  if (!control || !Number.isInteger(Number(pane))) return false;
+  try {
+    return (await sendControl(control, { method: "popup.hide", params: { paneId: Number(pane) } }, 1000)).ok;
+  } catch (error) {
+    if (!(error instanceof ControlError)) throw error;
+    return false;
+  }
+}
+
+function listenForAttachments(attach: (attachments: Attachment[]) => void): () => void {
+  const { KOMUX_TAB_DIR: dir, KOMUX_PANE_ID: pane } = process.env;
+  const paneId = Number(pane);
+  if (!dir || !Number.isInteger(paneId)) return () => {};
+  const path = draftSocketPath(dir, paneId);
+  rmSync(path, { force: true });
+  const buffers = new WeakMap<object, string>();
+  const server = Bun.listen({
+    unix: path,
+    socket: {
+      data(socket, data) {
+        const lines = ((buffers.get(socket) ?? "") + data.toString()).split("\n");
+        buffers.set(socket, lines.pop()!);
+        for (const line of lines) {
+          try {
+            const { attach: sent } = JSON.parse(line) as { attach?: unknown };
+            if (Array.isArray(sent)) attach(sent.filter((item): item is Attachment => typeof item?.label === "string" && typeof item?.text === "string"));
+          } catch {}
+        }
+      },
+    },
+  });
+  return () => {
+    server.stop(true);
+    rmSync(path, { force: true });
+  };
 }
 
 async function readAttachments(source: { file: string; label?: string }): Promise<Attachment[]> {
@@ -412,35 +460,70 @@ export function withContext(attachments: Attachment[], text: string): string {
   return [...attachments.map((attachment) => attachment.text.trimEnd()), text].join("\n\n");
 }
 
-type InboxInfo = { commands: SlashCommand[]; mode?: string };
+export type InboxInfo = { commands: SlashCommand[]; mode?: string; reached: boolean; session?: string };
 
-function composeMessage(
-  renderer: CliRenderer,
-  name: string,
-  load: () => Promise<InboxInfo>,
-  cycleMode: () => Promise<InboxInfo>,
-  attached: Attachment[],
-): Promise<{ text: string; attachments: Attachment[] } | undefined> {
+type Message = { text: string; attachments: Attachment[] };
+
+export type ComposeIO = {
+  load: () => Promise<InboxInfo>;
+  cycleMode: () => Promise<InboxInfo>;
+  send: (message: Message) => Promise<void>;
+  hide: () => Promise<boolean>;
+  listen: (attach: (attachments: Attachment[]) => void) => () => void;
+  attached: Attachment[];
+};
+
+export function composeMessage(renderer: CliRenderer, name: string, io: ComposeIO): Promise<void> {
   return new Promise((resolve) => {
     let commands: SlashCommand[] = [];
-    let loading: Promise<void> | undefined;
-    const title = (mode?: string) => composeFooter(mode);
-    const fetch = () => {
-      loading ??= load().then((found) => {
-        commands = found.commands;
-        if (found.mode) header.content = title(found.mode);
-        if (found.commands.length === 0) loading = undefined;
-        completion.update();
-      });
-    };
+    let mode: string | undefined;
+    let problem: string | undefined;
+    let sending = false;
+    const draft = new DraftWatch(Date.now());
     const box = new BoxRenderable(renderer, { width: "100%", height: "100%", flexDirection: "column", backgroundColor: theme.raised, paddingRight: 1, paddingTop: 1 });
-    const header = new TextRenderable(renderer, { content: title(), height: 1, flexShrink: 0, wrapMode: "none" });
-    const attachments = [...attached];
+    const header = new TextRenderable(renderer, { content: composeFooter(undefined), height: 1, flexShrink: 0, wrapMode: "none" });
+    const attachments = [...io.attached];
     const chips = new TextRenderable(renderer, { content: chipText(attachments), flexShrink: 0, wrapMode: "word", marginBottom: 1 });
-    if (attachments.length > 0) box.add(chips);
+    const empty = () => input.plainText.trim() === "" && attachments.length === 0;
+    const showStatus = () => {
+      header.content = composeFooter(mode, problem ?? draft.status(empty(), Date.now()));
+    };
+    const showChips = () => {
+      const shown = box.getChildren().includes(chips);
+      chips.content = chipText(attachments);
+      if (attachments.length === 0 && shown) box.remove(chips);
+      if (attachments.length > 0 && !shown) box.insertBefore(chips, completion.list);
+    };
+    const learn = (found: InboxInfo) => {
+      if (found.commands.length > 0) commands = found.commands;
+      if (found.mode) mode = found.mode;
+      if (found.reached) draft.observe(found.session);
+      completion.update();
+      showStatus();
+    };
+    const poll = () => void io.load().then(learn);
+    const timer = setInterval(poll, 2000);
+    const stopListening = io.listen((sent) => {
+      attachments.push(...sent);
+      draft.edit(Date.now());
+      showChips();
+      showStatus();
+    });
+    const finish = () => {
+      clearInterval(timer);
+      stopListening();
+      resolve();
+    };
     const send = () => {
+      if (sending) return;
       const text = input.plainText.trim();
-      resolve(text ? { text, attachments } : undefined);
+      if (!text) return;
+      sending = true;
+      io.send({ text, attachments }).then(finish, (error: Error) => {
+        sending = false;
+        problem = `Couldn't send: ${error.message}`;
+        showStatus();
+      });
     };
     const input: TextareaRenderable = new TextareaRenderable(renderer, {
       flexGrow: 1,
@@ -452,30 +535,40 @@ function composeMessage(
       keyBindings: composeKeyBindings,
       onSubmit: send,
       onContentChange: () => {
-        if (commands.length === 0 && input.plainText.startsWith("/")) fetch();
+        if (commands.length === 0 && input.plainText.startsWith("/")) poll();
+        draft.edit(Date.now());
+        problem = undefined;
         completion.update();
+        showStatus();
       },
     });
     const completion = new SlashCompletion(renderer, input, { commands: () => commands, submit: send, quit: false });
+    if (attachments.length > 0) box.add(chips);
     box.add(completion.list);
     box.add(input);
     box.add(header);
     renderer.root.add(box);
     input.focus();
-    fetch();
+    poll();
     renderer.keyInput.on("keypress", (key: KeyEvent) => {
       if (key.name === "tab" && key.shift) {
         key.preventDefault();
-        void cycleMode().then((found) => {
-          if (found.mode) header.content = title(found.mode);
-        });
+        void io.cycleMode().then(learn);
+      } else if (key.ctrl && key.name === "c") {
+        key.preventDefault();
+        finish();
       } else if (key.name === "backspace" && input.plainText === "" && attachments.length > 0) {
         key.preventDefault();
         attachments.pop();
-        if (attachments.length === 0) box.remove(chips);
-        else chips.content = chipText(attachments);
+        showChips();
+        showStatus();
       } else if (completion.handleKey(key)) key.preventDefault();
-      else if (key.name === "escape") resolve(undefined);
+      else if (key.name === "escape") {
+        if (empty()) return finish();
+        void io.hide().then((hidden) => {
+          if (!hidden) finish();
+        });
+      }
     });
   });
 }
@@ -489,22 +582,20 @@ const composeHints: [string, string][] = [
   ["⏎", "send"],
   ["Alt ⏎", "newline"],
   ["⇧Tab", "mode"],
-  ["Esc", "cancel"],
+  ["Esc", "hide"],
+  ["Ctrl c", "discard"],
 ];
 
-function composeFooter(mode: string | undefined): StyledText {
+function composeFooter(mode: string | undefined, status?: string): StyledText {
   const hints = composeHints.flatMap(([key, label], index) => [...(index > 0 ? ["  "] : []), fg(theme.text)(key), fg(theme.muted)(` ${label}`)]);
-  return styled([...(mode ? [fg(theme.accent)(`${mode} mode`), "    "] : []), ...hints]);
-}
-
-function fetchInbox(socket: string): Promise<InboxInfo> {
-  return askInbox(socket, { commands: true });
+  return styled([...(status ? [fg(theme.warning)(status), "    "] : []), ...(mode ? [fg(theme.accent)(`${mode} mode`), "    "] : []), ...hints]);
 }
 
 function askInbox(socket: string, request: { commands: true } | { cycleMode: true }, timeoutMs = 1000): Promise<InboxInfo> {
+  const unreached: InboxInfo = { commands: [], reached: false };
   return new Promise((resolve) => {
     let buffer = "";
-    const timer = setTimeout(() => resolve({ commands: [] }), timeoutMs);
+    const timer = setTimeout(() => resolve(unreached), timeoutMs);
     const done = (info: InboxInfo) => {
       clearTimeout(timer);
       resolve(info);
@@ -519,14 +610,19 @@ function askInbox(socket: string, request: { commands: true } | { cycleMode: tru
           if (newline < 0) return;
           connection.end();
           try {
-            const reply = JSON.parse(buffer.slice(0, newline)) as { commands?: unknown; mode?: unknown };
-            done({ commands: parseCommands(reply.commands), mode: typeof reply.mode === "string" ? reply.mode : undefined });
+            const reply = JSON.parse(buffer.slice(0, newline)) as { commands?: unknown; mode?: unknown; session?: unknown };
+            done({
+              commands: parseCommands(reply.commands),
+              mode: typeof reply.mode === "string" ? reply.mode : undefined,
+              reached: "commands" in reply,
+              session: typeof reply.session === "string" ? reply.session : undefined,
+            });
           } catch {
-            done({ commands: [] });
+            done(unreached);
           }
         },
-        error: () => done({ commands: [] }),
+        error: () => done(unreached),
       },
-    }).catch(() => done({ commands: [] }));
+    }).catch(() => done(unreached));
   });
 }

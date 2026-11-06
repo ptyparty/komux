@@ -172,7 +172,7 @@ export class Workspace {
   }
 
   get popup(): Popup | undefined {
-    const view = this.popups.find((candidate) => candidate.tabId === this.tab.id && candidate.kind !== "ask");
+    const view = this.popups.find((candidate) => candidate.tabId === this.tab.id && candidate.kind !== "ask" && !candidate.hidden);
     if (view) return view;
     const popup = this.popups.find((candidate) => candidate.tabId === this.tab.id && !candidate.hidden);
     if (!popup) return undefined;
@@ -234,10 +234,22 @@ export class Workspace {
     const index = this.popups.findIndex((popup) => popup.kind === "view" && popup.key === key);
     if (index < 0) return false;
     const [popup] = this.popups.splice(index, 1);
+    popup!.hidden = false;
     this.popups.unshift(popup!);
     const tab = this.tabs.findIndex((candidate) => candidate.id === popup!.tabId);
     if (tab >= 0) this.active = tab;
     return true;
+  }
+
+  hideViewPopup(id: PaneId): boolean {
+    const popup = this.popups.find((candidate) => candidate.id === id && candidate.kind === "view");
+    if (!popup) return false;
+    popup.hidden = true;
+    return true;
+  }
+
+  hasDraft(target: PaneId): boolean {
+    return this.popups.some((popup) => popup.key === draftKey(target) && popup.hidden);
   }
 
   popupExited(id: PaneId): void {
@@ -1083,6 +1095,10 @@ export class Workspace {
       case "toggle-job": {
         const popup = this.popup;
         if (popup?.kind === "job") return this.popupExited(popup.id);
+        if (popup?.kind === "view" && popup.key?.startsWith("compose:")) {
+          popup.hidden = true;
+          return;
+        }
         if (popup?.kind === "view") {
           this.host.destroy(popup.id);
           return this.popupExited(popup.id);
@@ -1233,6 +1249,11 @@ export class Workspace {
   }
 
   private forgetPane(id: PaneId): void {
+    const draft = this.popups.find((popup) => popup.key === draftKey(id));
+    if (draft) {
+      this.host.destroy(draft.id);
+      this.popupExited(draft.id);
+    }
     this.paneNames.delete(id);
     this.agents.delete(id);
     this.replies.delete(id);
@@ -1518,4 +1539,8 @@ function showKeyName(key: Key): string {
 
 function isPrintable(sequence: string): boolean {
   return sequence.length > 0 && [...sequence].every((char) => char >= " " && char !== "\x7f");
+}
+
+export function draftKey(target: PaneId): string {
+  return `compose:${target}`;
 }
