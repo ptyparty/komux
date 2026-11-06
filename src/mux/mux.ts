@@ -16,12 +16,12 @@ import { ReadScheduler } from "./pty.ts";
 import { TabDirs } from "./tab-dirs.ts";
 import { LineTail } from "./tail.ts";
 import { refuseAgentCommand } from "./agent-jobs.ts";
-import { deliver } from "../claude/inbox.ts";
+import { deliver, draftSocketPath, sendLine } from "../claude/inbox.ts";
 import { bracketedPaste, peekSpec, promptRoute } from "./peek.ts";
 import { theme } from "./theme.ts";
 import { Tray, trayWidgets } from "./tray.ts";
 import { MuxView } from "./view.ts";
-import { Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
+import { draftKey, Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
 
 const readBudgetMs = 6;
 const readWindowMs = 16;
@@ -260,10 +260,20 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
         wakeClaude(nativeClaudes.get(target)!);
         return undefined;
       }
-      const key = `compose:${target}`;
+      const key = draftKey(target);
+      const draft = workspace.popups.find((popup) => popup.key === key);
+      if (draft && context) {
+        workspace.raiseViewPopup(key);
+        void sendLine(draftSocketPath(tabDirs.tabDir(draft.tabId), draft.id), { attach: context }).catch(() => {
+          workspace.message = "A message box is already open; send or close it, then comment again";
+          refresh();
+        });
+        refresh();
+        return undefined;
+      }
       if (workspace.raiseViewPopup(key)) {
         refresh();
-        return context ? "A message box is already open; send or close it, then comment again" : undefined;
+        return undefined;
       }
       const name = workspace.paneNames.get(target) ?? workspace.jobStatus(target)?.name ?? "Claude";
       const command = [...selfCommand(), "claude", "compose", "--socket", nativeClaudes.get(target)!, "--name", name];
@@ -589,6 +599,10 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           }
           return { ok: true };
         }
+        case "popup.hide":
+          if (!workspace.hideViewPopup(request.params.paneId)) return { ok: false, error: `no popup ${request.params.paneId}` };
+          refresh();
+          return { ok: true };
         case "job.hide":
           workspace.popupExited(request.params.jobId);
           refresh();

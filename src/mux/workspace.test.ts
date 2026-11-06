@@ -3,7 +3,7 @@ import { paneIds } from "./layout.ts";
 import { configSchema } from "./config.ts";
 import type { ReplyChoice } from "./peek.ts";
 import type { Project } from "./projects.ts";
-import { Workspace, openedKey, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
+import { draftKey, Workspace, openedKey, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
 
 class FakeHost implements PaneHost {
   created: [number, string | undefined][] = [];
@@ -788,6 +788,30 @@ describe("Workspace", () => {
     expect(workspace.popup?.id).toBe(compose);
     expect(workspace.popups.filter((popup) => popup.key === "compose:1")).toHaveLength(1);
     expect(workspace.raiseViewPopup("compose:2")).toBe(false);
+  });
+
+  test("a hidden message box keeps running as a draft until raised, and closes with its Claude", () => {
+    const host = new FakeHost();
+    const workspace = new Workspace(host);
+    press(workspace, "ctrl+space", "p", "s");
+    const claude = workspace.focused;
+    const compose = workspace.reservePaneId();
+    workspace.openViewPopup(compose, "Message Claude", claude, undefined, draftKey(claude));
+    expect(workspace.hideViewPopup(compose)).toBe(true);
+    expect(workspace.popup).toBeUndefined();
+    expect(workspace.hasDraft(claude)).toBe(true);
+    expect(host.destroyed).toEqual([]);
+    expect(workspace.raiseViewPopup(draftKey(claude))).toBe(true);
+    expect(workspace.popup?.id).toBe(compose);
+    expect(workspace.hasDraft(claude)).toBe(false);
+    press(workspace, "alt+j");
+    expect(workspace.popup).toBeUndefined();
+    expect(workspace.hasDraft(claude)).toBe(true);
+    expect(host.destroyed).toEqual([]);
+    workspace.paneExited(claude);
+    expect(host.destroyed).toContain(compose);
+    expect(workspace.popups).toEqual([]);
+    expect(workspace.hideViewPopup(compose)).toBe(false);
   });
 
   test("Alt p and Alt a bring the open reply forward, and replace it once a newer reply arrives", () => {

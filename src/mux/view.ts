@@ -260,7 +260,7 @@ export class MuxView {
       if (job.agent) {
         const reply = this.workspace.latestReply(job.id);
         const mode = this.workspace.modes.get(job.id);
-        const modeLabel = mode ? `${mode} · ` : "";
+        const modeLabel = `${this.workspace.hasDraft(job.id) ? "✎ draft · " : ""}${mode ? `${mode} · ` : ""}`;
         const wakingUp = this.workspace.wakeups.has(job.id);
         const wakeup = wakingUp && room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeupLabel) >= 10 ? wakeupLabel : "";
         const textRoom = Math.max(room - Bun.stringWidth(modeLabel) - Bun.stringWidth(wakeup), 1);
