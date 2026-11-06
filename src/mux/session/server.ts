@@ -2,6 +2,7 @@ import { createCliRenderer, type CliRenderer } from "@opentui/core";
 import type { Socket } from "bun";
 import { rmSync } from "node:fs";
 import { Readable, Writable } from "node:stream";
+import { writeLog } from "../../log.ts";
 import { serveControl } from "../control.ts";
 import { loadConfig } from "../config.ts";
 import { GraphicsRelay } from "../graphics.ts";
@@ -52,7 +53,7 @@ export async function runServer(name: string): Promise<void> {
   let queue = Promise.resolve();
 
   const serialize = (work: () => Promise<void>) => {
-    queue = queue.then(work).catch((error) => console.error(error));
+    queue = queue.then(work).catch(writeLog);
   };
 
   const say = (socket: ClientSocket, goodbye: Goodbye) => {
@@ -98,7 +99,7 @@ export async function runServer(name: string): Promise<void> {
         useMouse: true,
       });
       const { config, error } = await loadConfig();
-      if (error) console.error(error);
+      if (error) writeLog(error);
       mux = createMux(renderer, {
         session: name,
         controlSocket: paths.control,

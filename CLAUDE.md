@@ -17,6 +17,10 @@ Default to using Bun instead of Node.js.
 - `skills/komux-ask/`: the agent skill.
 - `rules/`: Claude Code rules for sessions inside komux, linked into `~/.claude/rules`.
 
+## Logging
+
+- While an OpenTUI renderer is running, as it always is in the session server, log with `writeLog` from `src/log.ts`, not `console.*`. The renderer replaces the global console and keeps its output in memory, so it never reaches stderr or the session log.
+
 ## Testing
 
 - Keep form behaviour in `FormController` so it can be tested without a terminal.
