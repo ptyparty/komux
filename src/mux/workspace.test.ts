@@ -152,6 +152,26 @@ describe("Workspace", () => {
     expect(host.created).toEqual([[1, "/home"]]);
   });
 
+  test("the focused pane can zoom itself and give the zoom back, and no other pane can", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "ctrl+space", "p", "r");
+    expect(workspace.zoomPane(1, true)).toBeUndefined();
+    expect(workspace.tab).toMatchObject({ layoutFocus: 2, zoomed: false });
+    expect(workspace.zoomPane(2, true)).toBe(false);
+    expect(workspace.tab).toMatchObject({ layoutFocus: 2, zoomed: true });
+    expect(workspace.zoomPane(2, false)).toBe(true);
+    expect(workspace.tab.zoomed).toBe(false);
+  });
+
+  test("an open, focused drawer zooms the drawer rather than the layout", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "alt+d");
+    const drawer = workspace.drawerOf()!.id;
+    expect(workspace.zoomPane(drawer, true)).toBe(false);
+    expect(workspace.drawerOf()?.zoomed).toBe(true);
+    expect(workspace.tab.zoomed).toBe(false);
+  });
+
   test("normal mode passes ordinary keys through to the pane", () => {
     const workspace = new Workspace(new FakeHost());
     expect(press(workspace, "a", "ctrl+c", "alt+x")).toEqual([false, false, false]);

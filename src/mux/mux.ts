@@ -506,6 +506,13 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           refresh();
           return { ok: true };
         }
+        case "pane.zoom": {
+          const { paneId, zoomed } = request.params;
+          const was = workspace.zoomPane(paneId, zoomed);
+          if (was === undefined) return { ok: false, error: `pane ${paneId} isn't the focused pane` };
+          refresh();
+          return { ok: true, result: { wasZoomed: was } };
+        }
         case "agent.state": {
           const { paneId, state, detail, sessionId, reply, toast, wakeup } = request.params;
           if (sessionId) trackSession(paneId, sessionId, state === "clear");
