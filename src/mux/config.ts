@@ -14,7 +14,7 @@ export type TabsSpec = { tabs: PaneSpec[] };
 export type LayoutSpec = PaneSpec | SplitSpec | TabsSpec;
 export type JobSpec = { command: string[]; name?: string; dock: boolean };
 export type DrawerSpec = { command?: string[]; name?: string; height?: number };
-export type LayoutEntry = { jobs: JobSpec[]; drawer?: DrawerSpec; args?: string[]; name?: string; layout: LayoutSpec };
+export type LayoutEntry = { jobs: JobSpec[]; drawer?: DrawerSpec; args?: string[]; name?: string; labels?: Record<string, string>; layout: LayoutSpec };
 
 const paneSpec = z
   .object({
@@ -58,16 +58,30 @@ const layoutEntry: z.ZodType<LayoutEntry, unknown> = z
       .optional()
       .describe("Values komux project --arg must give, filled in wherever {name} appears in commands and the tab name"),
     name: z.string().min(1).optional().describe("Tab name; {project} and {arg} are filled in. Defaults to the project's name"),
+    labels: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe("Labels sent with the tab's events for other programs to read, such as { braid: \"pr-{pr}\" }; {project} and {arg} are filled in"),
     services: z.undefined({ error: "services are now jobs: rename `services:` to `jobs:`" }).optional(),
   })
-  .transform(({ jobs, drawer, args, name, services: _services, ...layout }) => ({
+  .transform(({ jobs, drawer, args, name, labels, services: _services, ...layout }) => ({
     jobs,
     ...(drawer ? { drawer } : {}),
     ...(args ? { args } : {}),
     ...(name ? { name } : {}),
+    ...(labels ? { labels } : {}),
     layout: layout as unknown,
   }))
-  .pipe(z.object({ jobs: z.custom<JobSpec[]>(), drawer: z.custom<DrawerSpec>().optional(), args: z.custom<string[]>().optional(), name: z.string().optional(), layout: layoutSpec }));
+  .pipe(
+    z.object({
+      jobs: z.custom<JobSpec[]>(),
+      drawer: z.custom<DrawerSpec>().optional(),
+      args: z.custom<string[]>().optional(),
+      name: z.string().optional(),
+      labels: z.custom<Record<string, string>>().optional(),
+      layout: layoutSpec,
+    }),
+  );
 
 const keyBinding = z
   .object({
@@ -83,11 +97,23 @@ const keyBinding = z
 
 export type KeyBinding = z.infer<typeof keyBinding>;
 
+const keyMode = z
+  .object({
+    key: z.string().regex(/^(shift\+)?[^\s+]+$/, "a mode's key is one key after Ctrl Space, such as \"m\" or \"shift+m\"").describe("Key after Ctrl Space that enters the mode, such as \"m\""),
+    name: z.string().min(1).describe("Mode name, shown on the bar and the Ctrl Space card"),
+    about: z.string().optional().describe("What the mode is for, shown beside its name"),
+    keys: z.array(keyBinding).min(1).describe("Keys inside the mode, such as { key: \"o\", popup: [\"htop\"] }; each runs once and leaves the mode"),
+  })
+  .strict();
+
+export type KeyMode = z.infer<typeof keyMode>;
+
 const plugin = z
   .object({
     name: z.string().optional(),
     tray: z.array(trayEntry).default([]).describe("Widgets added after the config's own"),
     keys: z.array(keyBinding).default([]).describe("Key bindings added after the config's own"),
+    modes: z.array(keyMode).default([]).describe("Ctrl Space modes added after the config's own"),
     run: z.array(z.array(z.string()).min(1)).default([]).describe("Helper programs komux runs for the session's life, restarting any that exit"),
   })
   .strict();
@@ -111,6 +137,7 @@ export const configSchema = z
     tray: z.array(trayEntry).default(defaultTray).describe("Widgets on the right of the mode bar, such as { widget: \"clock\" }, { widget: \"system\" }, or { command: [...] }"),
     startup: z.array(z.string()).default([]).describe("Named tabs a new session opens instead of a plain tab"),
     keys: z.array(keyBinding).default([]).describe("Keys that open a command in a popup or a new tab, such as { key: \"alt+m\", popup: [\"htop\"] }"),
+    modes: z.array(keyMode).default([]).describe("Modes entered with Ctrl Space and one key, each holding keys that open a command, such as { key: \"m\", name: \"ponpoko\", keys: [...] }"),
     run: z.array(z.array(z.string()).min(1)).default([]).describe("Helper programs komux runs for the session's life, restarting any that exit"),
     plugins: z.array(plugin).default([]).describe("Slices of config from plugins, each adding tray widgets, keys and helpers"),
     projects: z
@@ -142,11 +169,27 @@ export const configSchema = z
     };
     config.keys.forEach((binding, index) => checkKey(binding, ["keys", index, "key"], "the config"));
     config.plugins.forEach((entry, index) => entry.keys.forEach((binding, at) => checkKey(binding, ["plugins", index, "keys", at, "key"], entry.name ?? `plugin ${index + 1}`)));
+    const seenModes = new Map<string, string>();
+    const checkMode = (mode: KeyMode, path: (string | number)[], owner: string) => {
+      const builtIn = keymap.leader.bindings.find((candidate) => candidate.keys.includes(mode.key));
+      if (builtIn) ctx.addIssue({ code: "custom", path: [...path, "key"], message: `Ctrl Space ${mode.key} is komux's ${builtIn.name ?? "own key"}; pick another key` });
+      else if (seenModes.has(mode.key)) ctx.addIssue({ code: "custom", path: [...path, "key"], message: `Ctrl Space ${mode.key} is already a mode of ${seenModes.get(mode.key)}` });
+      else seenModes.set(mode.key, owner);
+      const inside = new Set<string>();
+      mode.keys.forEach((binding, at) => {
+        if (binding.key === "escape") ctx.addIssue({ code: "custom", path: [...path, "keys", at, "key"], message: "escape leaves the mode; pick another key" });
+        else if (inside.has(binding.key)) ctx.addIssue({ code: "custom", path: [...path, "keys", at, "key"], message: `${binding.key} is bound twice in ${mode.name}` });
+        inside.add(binding.key);
+      });
+    };
+    config.modes.forEach((mode, index) => checkMode(mode, ["modes", index], "the config"));
+    config.plugins.forEach((entry, index) => entry.modes.forEach((mode, at) => checkMode(mode, ["plugins", index, "modes", at], entry.name ?? `plugin ${index + 1}`)));
   })
   .transform(({ plugins, ...config }) => ({
     ...config,
     tray: [...config.tray, ...plugins.flatMap((entry): TrayEntry[] => entry.tray)],
     keys: [...config.keys, ...plugins.flatMap((entry) => entry.keys)],
+    modes: [...config.modes, ...plugins.flatMap((entry) => entry.modes)],
     run: [...config.run, ...plugins.flatMap((entry) => entry.run)],
   }));
 
@@ -218,6 +261,7 @@ function fillLayout(entry: LayoutEntry, fill: (text: string) => string): LayoutE
     ...entry,
     jobs: entry.jobs.map((job) => ({ ...job, command: job.command.map(fill), ...(job.name ? { name: fill(job.name) } : {}) })),
     ...(entry.drawer ? { drawer: fillPane(entry.drawer) } : {}),
+    ...(entry.labels ? { labels: Object.fromEntries(Object.entries(entry.labels).map(([key, value]) => [key, fill(value)])) } : {}),
     layout: fillSpec(entry.layout),
   };
 }

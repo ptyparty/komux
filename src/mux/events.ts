@@ -3,8 +3,8 @@ import type { Socket } from "bun";
 import type { PaneId } from "./layout.ts";
 import type { AgentState, JobState } from "./workspace.ts";
 
-export type TabFacts = { id: number; number: number; name: string; dir: string };
-export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState | "idle"; name?: string; sessionId?: string };
+export type TabFacts = { id: number; number: number; name: string; dir: string; labels?: Record<string, string> };
+export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState | "idle"; asking?: boolean; name?: string; sessionId?: string };
 export type JobFacts = { id: PaneId; tabId: number; name: string; state: JobState; code?: number | null; agent: boolean };
 export type ToastFacts = { kind: "reply" | "job"; id: PaneId; tabId: number };
 export type World = { tabs: TabFacts[]; focus: { tabId: number; paneId: PaneId } | undefined; agents: AgentFacts[]; jobs: JobFacts[]; toasts: ToastFacts[] };
@@ -32,14 +32,14 @@ export function worldChanges(before: World, after: World): StreamEvent[] {
   for (const tab of after.tabs) {
     const old = oldTabs.get(tab.id);
     if (!old) events.push({ type: "tab.opened", tab });
-    else if (old.name !== tab.name || old.dir !== tab.dir || old.number !== tab.number) events.push({ type: "tab.changed", tab });
+    else if (old.name !== tab.name || old.dir !== tab.dir || old.number !== tab.number || JSON.stringify(old.labels) !== JSON.stringify(tab.labels)) events.push({ type: "tab.changed", tab });
   }
 
   const oldAgents = new Map(before.agents.map((agent) => [agent.paneId, agent]));
   const newAgents = new Map(after.agents.map((agent) => [agent.paneId, agent]));
   for (const agent of after.agents) {
     const old = oldAgents.get(agent.paneId);
-    if (!old || old.state !== agent.state || old.tabId !== agent.tabId || old.sessionId !== agent.sessionId || old.name !== agent.name) events.push({ type: "agent.state", agent });
+    if (!old || old.state !== agent.state || old.asking !== agent.asking || old.tabId !== agent.tabId || old.sessionId !== agent.sessionId || old.name !== agent.name) events.push({ type: "agent.state", agent });
   }
   for (const agent of before.agents) if (!newAgents.has(agent.paneId)) events.push({ type: "agent.gone", paneId: agent.paneId, tabId: agent.tabId });
 

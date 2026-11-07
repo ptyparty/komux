@@ -1,8 +1,9 @@
 import { BoxRenderable, TextRenderable, bg, bold, fg, type CliRenderer } from "@opentui/core";
 import { styled, type Part } from "../ui/styled.ts";
+import type { KeyMode } from "./config.ts";
 import type { AppKeys } from "./context.ts";
 import { fit } from "./fit.ts";
-import { hints, keymap, leaderGroups, withoutLeader, type Hint, type KeyGroup, type Mode } from "./keymap.ts";
+import { hints, keymap, leaderGroups, showKey, withoutLeader, type Hint, type KeyGroup, type Mode } from "./keymap.ts";
 import type { Palette } from "./palette.ts";
 import { appColor, card, theme } from "./theme.ts";
 
@@ -25,9 +26,15 @@ export class KeysCard {
     return this.rows;
   }
 
-  render(state: { mode: Mode; leader: boolean; app?: AppKeys; bottom: number; lockLeader: boolean }): void {
+  render(state: { mode: Mode; leader: boolean; app?: AppKeys; bottom: number; lockLeader: boolean; keyModes: KeyMode[]; keyMode?: KeyMode }): void {
     const room = this.renderer.width - 2;
-    const lines = state.leader ? leaderLines(state.app, room - 3) : state.mode === "normal" || state.mode === "leader" ? undefined : modeLines(state.mode, room - 3, state.lockLeader);
+    const lines = state.leader
+      ? leaderLines(state.app, state.keyModes, room - 3)
+      : state.mode === "normal" || state.mode === "leader"
+        ? undefined
+        : state.mode === "custom" && state.keyMode
+          ? keyModeLines(state.keyMode, room - 3)
+          : modeLines(state.mode, room - 3, state.lockLeader);
     this.box.visible = lines !== undefined;
     this.rows = lines?.length ?? 0;
     if (!lines) return;
@@ -40,8 +47,9 @@ export class KeysCard {
   }
 }
 
-function leaderLines(app: AppKeys | undefined, room: number): Part[][] {
+function leaderLines(app: AppKeys | undefined, keyModes: KeyMode[], room: number): Part[][] {
   const columns = leaderGroups.map((group) => groupColumn(group, theme.accent));
+  if (keyModes.length > 0) columns.push(groupColumn({ title: "More", hints: keyModes.map((mode) => ({ keys: showKey(mode.key), description: `${mode.name}…` })) }, theme.accent));
   const appColumn = app ? appKeysColumn(app) : undefined;
   if (appColumn && columns.reduce((total, column) => total + column.width + columnGap, 0) + appColumn.width <= room) columns.push(appColumn);
   const depth = Math.max(...columns.map((column) => column.rows.length));
@@ -81,14 +89,22 @@ function appKeysColumn(app: AppKeys): Column {
 
 function modeLines(mode: Mode, room: number, lockLeader: boolean): Part[][] {
   const { title, about } = keymap[mode];
-  const color = theme.modes[mode];
-  const heading: Part[] = [bold(fg(color)(title.toUpperCase())), fg(theme.muted)(`  ${lockLeader ? "Ctrl Space pressed · l unlocks, any other key goes to the pane" : about}`)];
   const searchable = keymap[mode].bindings.some((binding) => binding.command.type === "palette");
-  const right: Part[] = mode === "locked" ? [] : [...(searchable ? [fg(theme.text)("?"), fg(theme.muted)(" search  ")] : []), fg(theme.text)("Esc"), fg(theme.muted)(" done")];
+  return cardLines({ title, about: lockLeader ? "Ctrl Space pressed · l unlocks, any other key goes to the pane" : about, color: theme.modes[mode], searchable, done: mode !== "locked", hints: hints(mode) }, room);
+}
+
+function keyModeLines(mode: KeyMode, room: number): Part[][] {
+  const keys = mode.keys.map((binding): Hint => ({ keys: showKey(binding.key), description: binding.name ?? (binding.popup ?? binding.tab)![0]! }));
+  return cardLines({ title: mode.name, about: mode.about ?? "", color: theme.modes.custom, searchable: false, done: true, hints: keys }, room);
+}
+
+function cardLines(card: { title: string; about: string; color: string; searchable: boolean; done: boolean; hints: Hint[] }, room: number): Part[][] {
+  const heading: Part[] = [bold(fg(card.color)(card.title.toUpperCase())), fg(theme.muted)(`  ${card.about}`)];
+  const right: Part[] = card.done ? [...(card.searchable ? [fg(theme.text)("?"), fg(theme.muted)(" search  ")] : []), fg(theme.text)("Esc"), fg(theme.muted)(" done")] : [];
   const gap = Math.max(room - lineWidth(heading) - lineWidth(right), 2);
   const rows: Part[][] = [];
   let row: Part[] = [];
-  for (const hint of hints(mode)) {
+  for (const hint of card.hints) {
     const parts = hintParts([hint]);
     if (row.length > 0 && lineWidth(row) + 3 + lineWidth(parts) > room) {
       rows.push(row);

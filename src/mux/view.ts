@@ -134,7 +134,15 @@ export class MuxView {
     this.jobsPanel.render(showJobs ? this.workspace.tabJobs() : undefined, this.workspace.selectedJob, Date.now());
     this.renderDock();
     const above = 1 + (this.dock.visible ? this.dockJobs.length : 0);
-    this.keysCard.render({ mode: this.workspace.mode, leader: this.workspace.leaderCardShown(), app: this.workspace.focusedApp(), bottom: above, lockLeader: this.workspace.lockLeader });
+    this.keysCard.render({
+      mode: this.workspace.mode,
+      leader: this.workspace.leaderCardShown(),
+      app: this.workspace.focusedApp(),
+      bottom: above,
+      lockLeader: this.workspace.lockLeader,
+      keyModes: this.workspace.keyModes(),
+      keyMode: this.workspace.keyMode,
+    });
     const notice = this.renderHints();
     this.hintBar.visible = notice.chunks.length > 0;
     this.hintBar.content = notice;
@@ -482,7 +490,8 @@ export class MuxView {
 
   private renderBar(): StyledText {
     const mode = this.workspace.mode;
-    const parts: Part[] = [bold(bg(theme.modes[mode])(fg(theme.background)(` ${mode.toUpperCase()} `))), " "];
+    const label = mode === "custom" && this.workspace.keyMode ? this.workspace.keyMode.name : mode;
+    const parts: Part[] = [bold(bg(theme.modes[mode])(fg(theme.background)(` ${label.toUpperCase()} `))), " "];
     this.workspace.tabs.forEach((tab, index) => {
       const active = index === this.workspace.active;
       const paint = (part: Part) => (active ? bg(theme.raised)(part) : part);

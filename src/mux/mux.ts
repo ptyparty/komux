@@ -395,15 +395,22 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   const world = (): World => {
     const tabIds = new Map(workspace.tabs.map((tab) => [tab.id, tab]));
     const agentJobs = new Set(workspace.jobs.filter((job) => job.agent).map((job) => job.id));
+    const asking = workspace.askingPanes();
     return {
-      tabs: workspace.tabs.map((tab, index) => ({ id: tab.id, number: index + 1, name: tab.name, dir: tab.cwd ?? tab.opened?.project.dir ?? host.cwd(tab.layoutFocus) ?? "" })),
+      tabs: workspace.tabs.map((tab, index) => ({
+        id: tab.id,
+        number: index + 1,
+        name: tab.name,
+        dir: tab.cwd ?? tab.opened?.project.dir ?? host.cwd(tab.layoutFocus) ?? "",
+        ...(tab.labels ? { labels: tab.labels } : {}),
+      })),
       focus: workspace.tabs.length > 0 ? { tabId: workspace.tab.id, paneId: workspace.focused } : undefined,
       agents: [...new Set([...workspace.agents.keys(), ...paneSessions.keys(), ...nativeClaudes.keys()])].flatMap((paneId) => {
         const tab = workspace.tabOf(paneId);
         if (!tab) return [];
         const state = workspace.agents.get(paneId) ?? "idle";
         const name = workspace.paneNames.get(paneId) ?? workspace.jobStatus(paneId)?.name;
-        return [{ paneId, tabId: tab.id, state, ...(name ? { name } : {}), ...(paneSessions.has(paneId) ? { sessionId: paneSessions.get(paneId) } : {}) }];
+        return [{ paneId, tabId: tab.id, state, ...(asking.has(paneId) ? { asking: true } : {}), ...(name ? { name } : {}), ...(paneSessions.has(paneId) ? { sessionId: paneSessions.get(paneId) } : {}) }];
       }),
       jobs: workspace.jobs.filter((job) => tabIds.has(job.tabId)).map((job) => ({ id: job.id, tabId: job.tabId, name: job.name, state: job.state, code: job.code, agent: agentJobs.has(job.id) })),
       toasts: workspace.toasts().flatMap((toast): ToastFacts[] => {
@@ -540,6 +547,11 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
               workspace.paneExited(closing);
               refresh();
             }, 0);
+          refresh();
+          return { ok: true };
+        }
+        case "tab.focus": {
+          if (!workspace.focusTab(request.params.tabId)) return { ok: false, error: `no tab ${request.params.tabId}` };
           refresh();
           return { ok: true };
         }

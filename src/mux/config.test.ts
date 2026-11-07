@@ -122,6 +122,13 @@ describe("config", () => {
     expect(projectTab(defaultConfig, { name: "penguin", dir: "/p" })).toEqual({ name: "penguin" });
   });
 
+  test("a layout's labels are filled in from its args and project", () => {
+    const config = configSchema.parse({ layouts: { story: { args: ["story"], labels: { braid: "sc-{story}", repo: "{project}" }, row: [{}] } } });
+    expect(config.layouts.story!.labels).toEqual({ braid: "sc-{story}", repo: "{project}" });
+    const opened = projectTab(config, { name: "penguin", dir: "/p", layout: "story" }, { story: "52633" });
+    expect("layout" in opened && opened.layout?.labels).toEqual({ braid: "sc-52633", repo: "penguin" });
+  });
+
   test("bad jobs, drawers, and args, old services, and unknown project layouts are errors", async () => {
     for (const [name, source] of [
       ["empty-job.ts", `export default { layouts: { a: { jobs: [{ command: [] }], row: [{}] } } };`],
@@ -203,5 +210,27 @@ describe("plugins and keys", () => {
     const twice = configSchema.safeParse({ keys: [{ key: "alt+m", popup: ["a"] }], plugins: [{ name: "ponpoko", keys: [{ key: "alt+m", popup: ["b"] }] }] });
     expect(JSON.stringify(twice.error?.issues)).toContain("alt+m is already bound by the config");
     expect(configSchema.safeParse({ keys: [{ key: "alt+m" }] }).success).toBe(false);
+  });
+
+  test("plugins add their modes after the config's own", () => {
+    const config = configSchema.parse({
+      modes: [{ key: "e", name: "mine", keys: [{ key: "e", popup: ["mine"] }] }],
+      plugins: [{ name: "ponpoko", modes: [{ key: "m", name: "ponpoko", keys: [{ key: "o", popup: ["ponpoko"] }] }] }],
+    });
+    expect(config.modes.map((mode) => mode.key)).toEqual(["e", "m"]);
+  });
+
+  test("refuses modes on komux's own leader keys, modes on one key twice, and escape inside a mode", () => {
+    const own = configSchema.safeParse({ modes: [{ key: "t", name: "mine", keys: [{ key: "o", popup: ["a"] }] }] });
+    expect(JSON.stringify(own.error?.issues)).toContain("Ctrl Space t is komux's tab mode");
+    const twice = configSchema.safeParse({
+      modes: [{ key: "m", name: "mine", keys: [{ key: "o", popup: ["a"] }] }],
+      plugins: [{ name: "ponpoko", modes: [{ key: "m", name: "ponpoko", keys: [{ key: "o", popup: ["b"] }] }] }],
+    });
+    expect(JSON.stringify(twice.error?.issues)).toContain("Ctrl Space m is already a mode of the config");
+    const escape = configSchema.safeParse({ modes: [{ key: "m", name: "mine", keys: [{ key: "escape", popup: ["a"] }] }] });
+    expect(JSON.stringify(escape.error?.issues)).toContain("escape leaves the mode");
+    const inside = configSchema.safeParse({ modes: [{ key: "m", name: "mine", keys: [{ key: "o", popup: ["a"] }, { key: "o", popup: ["b"] }] }] });
+    expect(JSON.stringify(inside.error?.issues)).toContain("o is bound twice in mine");
   });
 });
