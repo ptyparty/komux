@@ -21,6 +21,7 @@ import { EventStream, type ToastFacts, type World } from "./events.ts";
 import { deliver, draftSocketPath, sendLine } from "../claude/inbox.ts";
 import { bracketedPaste, peekSpec, promptRoute } from "./peek.ts";
 import { theme } from "./theme.ts";
+import { Helpers } from "./helpers.ts";
 import { Tray, trayWidgets } from "./tray.ts";
 import { MuxView } from "./view.ts";
 import { draftKey, Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
@@ -445,6 +446,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   }
 
   tray.start();
+  const helpers = new Helpers(options.config.run, { ...paneEnv, ...(options.eventSocket ? { KOMUX_EVENTS_SOCKET: options.eventSocket } : {}) });
+  helpers.start();
 
   renderer.on("focused_renderable", (renderable: unknown) => {
     const pane = [...panes.values()].find((candidate) => candidate.owns(renderable));
@@ -473,6 +476,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     stopped = true;
     clearInterval(titles);
     tray.stop();
+    helpers.stop();
     events?.stop();
     recentTabs.flush();
     clearTimeout(popupTimer);

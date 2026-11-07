@@ -187,8 +187,10 @@ describe("plugins and keys", () => {
     const config = configSchema.parse({
       tray: [{ widget: "clock" }],
       keys: [{ key: "alt+m", popup: ["deal"] }],
-      plugins: [{ name: "ponpoko", tray: [{ name: "ponpoko", command: ["ponpoko", "tray"] }], keys: [{ key: "alt+r", tab: ["ponpoko"] }] }],
+      run: [["mine"]],
+      plugins: [{ name: "ponpoko", tray: [{ name: "ponpoko", command: ["ponpoko", "tray"] }], keys: [{ key: "alt+r", tab: ["ponpoko"] }], run: [["ponpoko", "komux"]] }],
     });
+    expect(config.run).toEqual([["mine"], ["ponpoko", "komux"]]);
     expect(config.tray.map((entry) => ("widget" in entry ? entry.widget : entry.name))).toEqual(["clock", "ponpoko"]);
     expect(config.keys.map((binding) => binding.key)).toEqual(["alt+m", "alt+r"]);
     expect("plugins" in config).toBe(false);

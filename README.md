@@ -275,7 +275,7 @@ export default {
 };
 ```
 
-A plugin is a slice of config, a function returning `tray` widgets and `keys`, which komux adds after the config's own. List plugins under `plugins`:
+A plugin is a slice of config, a function returning `tray` widgets, `keys` and `run` helpers, which komux adds after the config's own. A helper is a program komux runs for as long as the session lives, restarting it five seconds after it exits and stopping it when the session ends. It gets the same environment as a pane, plus `KOMUX_EVENTS_SOCKET`, the session's event stream. List plugins under `plugins`:
 
 ```ts
 import ponpoko from "./plugins/ponpoko.ts";
