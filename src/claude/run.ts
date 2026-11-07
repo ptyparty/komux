@@ -56,11 +56,11 @@ export async function runClaude(args: string[], options: { pick: boolean; prompt
       });
     }
     if (inbox) choice = await wakeAndChoose(renderer, inbox, () => started);
-    if (started?.prompt) queued.push(started.prompt);
     else {
       if (process.env.KOMUX_SOCKET) await offerSetup(renderer);
       if (options.pick) choice = await chooseSession(renderer);
     }
+    if (started?.prompt) queued.push(started.prompt);
     if (choice?.kind === "focus" && !(await focusPane(choice.paneId))) choice = { kind: "resume", sessionId: choice.sessionId };
   } catch (error) {
     await inbox?.stop().catch(() => {});
