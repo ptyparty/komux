@@ -103,6 +103,7 @@ export async function runServer(name: string): Promise<void> {
       mux = createMux(renderer, {
         session: name,
         controlSocket: paths.control,
+        eventSocket: paths.events,
         config,
         configError: error && "Could not load the komux config; see the session log",
         graphics,
