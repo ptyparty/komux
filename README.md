@@ -256,6 +256,7 @@ export default {
 };
 ```
 
+- **Streaming widgets** (`{ name, stream: [...] }`) run one long-lived program and show the last line it printed, so the text changes the moment the program says so. A line is plain text, or JSON like `{"text": "● 2 yours", "color": "warning"}` to colour it (`text`, `muted`, `accent`, `ok`, `warning`, `error`, or `#rrggbb`). If the program exits, the widget shows `!` and komux starts it again five seconds later.
 - **Command widgets** show the first line a program prints. They run every `every` milliseconds (10 seconds by default) and show `!` after a failure.
 - **TypeScript widgets** call `render` every `every` milliseconds (1 second by default). It may return a promise.
 - **Popups:** `open` is the command a widget's popup runs. Widgets without one open nothing.

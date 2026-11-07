@@ -8,7 +8,7 @@ import { KeysCard, PaletteCard } from "./keys-card.ts";
 import { Launcher, type EntryLook } from "./launcher.ts";
 import { paneIds, shownPaneTab, type LayoutNode, type PaneId, type TabsNode } from "./layout.ts";
 import type { Pane, PaneChrome } from "./pane.ts";
-import { agentBadges, agentColors, commandBadges, commandColors } from "./badges.ts";
+import { agentBadges, agentColors, badgeColor, commandBadges, commandColors } from "./badges.ts";
 import { appColor, card, theme } from "./theme.ts";
 import type { Tray } from "./tray.ts";
 import type { AgentState, CommandState, SwitchEntry, Workspace } from "./workspace.ts";
@@ -556,7 +556,7 @@ export class MuxView {
       }
       const label = ` ${text} `;
       const selected = selecting && index === this.workspace.selectedWidget;
-      parts.push(selected ? bold(bg(theme.modes.tray)(fg(theme.background)(label))) : fg(theme.text)(label));
+      parts.push(selected ? bold(bg(theme.modes.tray)(fg(theme.background)(label))) : fg(badgeColor(this.tray.colors[index]))(label));
       this.trayRanges.push({ start: column, end: column + label.length, index });
       column += label.length;
     });
