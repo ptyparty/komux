@@ -8,6 +8,7 @@ import { KeysCard, PaletteCard } from "./keys-card.ts";
 import { Launcher, type EntryLook } from "./launcher.ts";
 import { paneIds, shownPaneTab, type LayoutNode, type PaneId, type TabsNode } from "./layout.ts";
 import type { Pane, PaneChrome } from "./pane.ts";
+import { agentBadges, agentColors, commandBadges, commandColors } from "./badges.ts";
 import { appColor, card, theme } from "./theme.ts";
 import type { Tray } from "./tray.ts";
 import type { AgentState, CommandState, SwitchEntry, Workspace } from "./workspace.ts";
@@ -486,12 +487,8 @@ export class MuxView {
       const active = index === this.workspace.active;
       const paint = (part: Part) => (active ? bg(theme.raised)(part) : part);
       const asking = this.workspace.popupsWaiting(tab) > 0 ? " ?" : "";
-      const attention = this.workspace.tabAttention(tab);
-      const command = this.workspace.tabCommandState(tab);
       parts.push(paint(active ? bold(fg(theme.accent)(` ${index + 1}`)) : fg(theme.muted)(` ${index + 1}`)), paint(fg(active ? theme.text : theme.muted)(` ${tab.name}${asking}`)));
-      if (attention) parts.push(paint(fg(agentColors[attention])(` ${agentBadges[attention]}`)));
-      if (this.workspace.tabUnread(tab)) parts.push(paint(fg(theme.accent)(" 💬")));
-      if (command) parts.push(paint(fg(commandColors[command])(` ${commandBadges[command]}`)));
+      for (const badge of this.workspace.tabBadges(tab)) parts.push(paint(fg(badge.color)(` ${badge.text}`)));
       parts.push(paint(" "), " ");
     });
     if (this.workspace.clients > 1) parts.push(fg(theme.warning)(` ${this.workspace.clients} terminals attached `));
@@ -589,15 +586,11 @@ const dockTag = "docked";
 const slideMs = 90;
 const slideFrameMs = 15;
 const defaultPopupSize = { width: 80, height: 80 };
-const agentBadges: Record<AgentState, string> = { working: "🧠", waiting: "!", done: "🚀", failed: "✗" };
 const idleBadge = "💤";
 const awaitingBadge = "⌛";
 const wakeupLabel = " · handling a job event";
 const agentLabels: Record<AgentState, string> = { working: "working", waiting: "needs you", done: "done", failed: "failed" };
-const agentColors: Record<AgentState, string> = { working: theme.accent, waiting: theme.warning, done: theme.ok, failed: theme.error };
-const commandBadges: Record<CommandState, string> = { running: "⏳", succeeded: "🎉", failed: "💥" };
 const commandLabels: Record<CommandState, string> = { running: "running", succeeded: "succeeded", failed: "failed" };
-const commandColors: Record<CommandState, string> = { running: theme.accent, succeeded: theme.ok, failed: theme.error };
 
 const heldHints: Hint[] = [
   { keys: "Enter", description: "re-run" },
