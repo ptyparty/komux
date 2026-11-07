@@ -403,6 +403,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
         name: tab.name,
         dir: tab.cwd ?? tab.opened?.project.dir ?? host.cwd(tab.layoutFocus) ?? "",
         ...(tab.labels ? { labels: tab.labels } : {}),
+        ...(tab.opened?.project.layout ? { layout: tab.opened.project.layout } : {}),
+        ...(tab.opened?.args ? { args: tab.opened.args } : {}),
       })),
       focus: workspace.tabs.length > 0 ? { tabId: workspace.tab.id, paneId: workspace.focused } : undefined,
       agents: [...new Set([...workspace.agents.keys(), ...paneSessions.keys(), ...nativeClaudes.keys()])].flatMap((paneId) => {
@@ -581,8 +583,8 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           return error ? { ok: false, error } : { ok: true };
         }
         case "claude.start": {
-          const { target, resume, prompt } = request.params;
-          const error = workspace.openProject(target, true, {});
+          const { target, resume, prompt, layout, args } = request.params;
+          const error = workspace.openProject(target, true, { ...(layout ? { layout } : {}), ...(args ? { args } : {}) });
           refresh();
           if (error) return { ok: false, error };
           const tab = workspace.tab;

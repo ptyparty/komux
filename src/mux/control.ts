@@ -19,6 +19,8 @@ export const controlRequest = z.discriminatedUnion("method", [
       target: z.string().min(1).describe("The project directory whose tab holds the Claude"),
       resume: z.string().min(1).optional().describe("A session to resume; a new conversation when left out"),
       prompt: z.string().min(1).optional().describe("The first message of a new conversation"),
+      layout: z.string().min(1).optional().describe("The layout to open the project's tab with, when it isn't already open"),
+      args: z.record(z.string(), z.string()).optional().describe("The layout's args, such as a PR number"),
     }),
   }),
   z.object({

@@ -37,9 +37,14 @@ describe("worldChanges", () => {
   });
 
   test("reports a tab's labels changing and an agent starting to ask", () => {
-    const labelled: World = { ...world, tabs: [{ ...tab, labels: { braid: "sc-1" } }], agents: [{ paneId: 2, tabId: 1, state: "working", asking: true }] };
+    const labelled: World = { ...world, tabs: [{ ...tab, labels: { strand: "sc-1" } }], agents: [{ paneId: 2, tabId: 1, state: "working", asking: true }] };
     expect(worldChanges(world, labelled).map((event) => event.type)).toEqual(["tab.changed", "agent.state"]);
     expect(worldChanges(labelled, labelled)).toEqual([]);
+  });
+
+  test("reports the layout and args a tab was opened with", () => {
+    const review: World = { ...world, tabs: [{ ...tab, layout: "pr-review", args: { pr: "540", braid: "sc-1235" } }] };
+    expect(worldChanges(world, review)).toEqual([{ type: "tab.changed", tab: review.tabs[0]! }]);
   });
 
   test("reports agents, jobs and tabs that went away", () => {

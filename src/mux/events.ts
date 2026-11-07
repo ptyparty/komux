@@ -3,7 +3,7 @@ import type { Socket } from "bun";
 import type { PaneId } from "./layout.ts";
 import type { AgentState, JobState } from "./workspace.ts";
 
-export type TabFacts = { id: number; number: number; name: string; dir: string; labels?: Record<string, string> };
+export type TabFacts = { id: number; number: number; name: string; dir: string; labels?: Record<string, string>; layout?: string; args?: Record<string, string> };
 export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState | "idle"; asking?: boolean; name?: string; sessionId?: string };
 export type JobFacts = { id: PaneId; tabId: number; name: string; state: JobState; code?: number | null; agent: boolean };
 export type ToastFacts = { kind: "reply" | "job"; id: PaneId; tabId: number };
@@ -32,7 +32,7 @@ export function worldChanges(before: World, after: World): StreamEvent[] {
   for (const tab of after.tabs) {
     const old = oldTabs.get(tab.id);
     if (!old) events.push({ type: "tab.opened", tab });
-    else if (old.name !== tab.name || old.dir !== tab.dir || old.number !== tab.number || JSON.stringify(old.labels) !== JSON.stringify(tab.labels)) events.push({ type: "tab.changed", tab });
+    else if (old.name !== tab.name || old.dir !== tab.dir || old.number !== tab.number || JSON.stringify([old.labels, old.layout, old.args]) !== JSON.stringify([tab.labels, tab.layout, tab.args])) events.push({ type: "tab.changed", tab });
   }
 
   const oldAgents = new Map(before.agents.map((agent) => [agent.paneId, agent]));
