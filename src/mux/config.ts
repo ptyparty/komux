@@ -88,6 +88,7 @@ const plugin = z
     name: z.string().optional(),
     tray: z.array(trayEntry).default([]).describe("Widgets added after the config's own"),
     keys: z.array(keyBinding).default([]).describe("Key bindings added after the config's own"),
+    run: z.array(z.array(z.string()).min(1)).default([]).describe("Helper programs komux runs for the session's life, restarting any that exit"),
   })
   .strict();
 
@@ -110,7 +111,8 @@ export const configSchema = z
     tray: z.array(trayEntry).default(defaultTray).describe("Widgets on the right of the mode bar, such as { widget: \"clock\" }, { widget: \"system\" }, or { command: [...] }"),
     startup: z.array(z.string()).default([]).describe("Named tabs a new session opens instead of a plain tab"),
     keys: z.array(keyBinding).default([]).describe("Keys that open a command in a popup or a new tab, such as { key: \"alt+m\", popup: [\"htop\"] }"),
-    plugins: z.array(plugin).default([]).describe("Slices of config from plugins, each adding tray widgets and keys"),
+    run: z.array(z.array(z.string()).min(1)).default([]).describe("Helper programs komux runs for the session's life, restarting any that exit"),
+    plugins: z.array(plugin).default([]).describe("Slices of config from plugins, each adding tray widgets, keys and helpers"),
     projects: z
       .object({
         roots: z.array(z.string()).default(["~/work/*/*"]),
@@ -145,6 +147,7 @@ export const configSchema = z
     ...config,
     tray: [...config.tray, ...plugins.flatMap((entry): TrayEntry[] => entry.tray)],
     keys: [...config.keys, ...plugins.flatMap((entry) => entry.keys)],
+    run: [...config.run, ...plugins.flatMap((entry) => entry.run)],
   }));
 
 export type Config = z.infer<typeof configSchema>;
