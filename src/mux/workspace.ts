@@ -4,6 +4,7 @@ import { keyName, leaderKey, lookup, type Binding, type Command, type Key, type 
 import type { AppKeys } from "./context.ts";
 import { fuzzyScore, paletteEntries, rankEntries, type Palette, type PaletteEntry } from "./palette.ts";
 import type { QuietToast } from "./control.ts";
+import { agentBadges, agentColors, badgeColor, commandBadges, commandColors, type Badge } from "./badges.ts";
 import { replyChoices, type ReplyChoice } from "./peek.ts";
 import { expandHome, findRepo, looksLikePath, resolveTarget, type Project } from "./projects.ts";
 
@@ -129,6 +130,7 @@ export class Workspace {
   readonly dormant = new Set<PaneId>();
   readonly jobTexts = new Map<PaneId, string>();
   readonly trayTexts = new Map<PaneId, string>();
+  private readonly badges = new Map<number, Map<string, Badge>>();
   private notes: Note[] = [];
   private readonly hideOnReply = new Set<PaneId>();
   private readonly lastJobs = new Map<number, PaneId>();
@@ -704,6 +706,27 @@ export class Workspace {
         this.popupExited(id);
         break;
     }
+    return true;
+  }
+
+  tabBadges(tab: Tab): Badge[] {
+    const own: Badge[] = [];
+    const attention = this.tabAttention(tab);
+    const command = this.tabCommandState(tab);
+    if (attention) own.push({ owner: "komux", text: agentBadges[attention], color: agentColors[attention] });
+    if (this.tabUnread(tab)) own.push({ owner: "komux", text: "💬", color: badgeColor("accent") });
+    if (command) own.push({ owner: "komux", text: commandBadges[command], color: commandColors[command] });
+    const others = [...(this.badges.get(tab.id)?.values() ?? [])].sort((a, b) => a.owner.localeCompare(b.owner));
+    return [...own, ...others];
+  }
+
+  setBadge(tabId: number, owner: string, badge: { text: string; color?: string } | null): boolean {
+    if (!this.tabs.some((tab) => tab.id === tabId)) return false;
+    const badges = this.badges.get(tabId) ?? new Map<string, Badge>();
+    if (badge === null) badges.delete(owner);
+    else badges.set(owner, { owner, text: badge.text, color: badgeColor(badge.color) });
+    if (badges.size === 0) this.badges.delete(tabId);
+    else this.badges.set(tabId, badges);
     return true;
   }
 
@@ -1408,6 +1431,7 @@ export class Workspace {
       this.forgetDrawer(tab);
     }
     const [removed] = this.tabs.splice(index, 1);
+    this.badges.delete(removed!.id);
     this.host.tabClosed(removed!.id);
     if (this.tabs.length === 0) {
       this.quit = true;

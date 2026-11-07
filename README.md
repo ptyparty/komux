@@ -290,6 +290,16 @@ Removing the line removes the plugin. Plugins can't use a key the config or anot
 
 Each session offers a stream of what it sees on `<session>.events.sock` in `$XDG_RUNTIME_DIR/komux/sessions/`: one JSON object per line, starting with a `snapshot` of the tabs and their directories, Claude panes and their states, jobs and the toasts waiting for you, then a line for each change (`tab.opened`, `agent.state`, `job.finished`, `toast.dismissed`, `focus` and others). Every line names its session and the komux server, which changes when komux restarts. Watch it with `socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/komux/sessions/main.events.sock`.
 
+## Tab badges
+
+A program can put a short badge on a tab's chip through the control socket, and clear it again by sending `null`. Badges are keyed by tab and owner, so each program manages its own; komux's own agent, reply and command badges come first, then the others by owner name.
+
+```json
+{"method":"tab.badge","params":{"tabId":3,"owner":"ponpoko","text":"●","color":"warning"}}
+```
+
+`color` is one of `text`, `muted`, `accent`, `ok`, `warning`, `error`, or a `#rrggbb` colour. Tab ids are in the event stream. A tab's badges go when the tab closes.
+
 ## Images
 
 When the terminal komux is attached to supports kitty graphics, programs in panes can show images using kitty's Unicode placeholders, the same way they would inside tmux. In fish panes, `kitten icat shot.png` adds `--unicode-placeholder` for you; elsewhere, pass it yourself. The image scrolls and moves with the pane's text, and it shows in tabs and popups.

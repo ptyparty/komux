@@ -54,6 +54,15 @@ export const controlRequest = z.discriminatedUnion("method", [
   z.object({ method: z.literal("script.tray"), params: z.object({ paneId: z.number().int(), text: z.string().max(200).nullable() }) }),
   z.object({ method: z.literal("script.toast"), params: z.object({ paneId: z.number().int(), text: z.string().max(200) }) }),
   z.object({ method: z.literal("script.state"), params: z.object({ paneId: z.number().int() }) }),
+  z.object({
+    method: z.literal("tab.badge"),
+    params: z.object({
+      tabId: z.number().int(),
+      owner: z.string().min(1).max(32).refine((owner) => owner !== "komux", "komux is komux's own badge owner"),
+      text: z.string().min(1).max(8).nullable().describe("Badge text, or null to clear it"),
+      color: z.string().regex(/^(text|muted|accent|ok|warning|error|#[0-9a-fA-F]{6})$/).optional(),
+    }),
+  }),
   z.object({ method: z.literal("session.info") }),
   z.object({ method: z.literal("session.quit") }),
 ]);

@@ -2117,5 +2117,21 @@ describe("review fixes", () => {
     press(workspace, "alt+shift+t");
     expect(workspace.tabs.map((tab) => tab.name)).toContain("htop");
   });
+
+  test("tab badges put komux's own first, then other programs' by owner", () => {
+    const workspace = new Workspace(new FakeHost(), "/home");
+    const tab = workspace.tab;
+    workspace.setAgentState(1, "waiting");
+    expect(workspace.setBadge(tab.id, "zeta", { text: "z" })).toBe(true);
+    expect(workspace.setBadge(tab.id, "ponpoko", { text: "●2", color: "warning" })).toBe(true);
+    expect(workspace.tabBadges(tab).map((badge) => [badge.owner, badge.text])).toEqual([
+      ["komux", "!"],
+      ["ponpoko", "●2"],
+      ["zeta", "z"],
+    ]);
+    workspace.setBadge(tab.id, "zeta", null);
+    expect(workspace.tabBadges(tab).map((badge) => badge.owner)).toEqual(["komux", "ponpoko"]);
+    expect(workspace.setBadge(99, "ponpoko", { text: "x" })).toBe(false);
+  });
 });
 

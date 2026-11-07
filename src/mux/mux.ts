@@ -661,6 +661,12 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           workspace.addNote(request.params.paneId, request.params.text);
           refresh();
           return { ok: true };
+        case "tab.badge": {
+          const { tabId, owner, text, color } = request.params;
+          if (!workspace.setBadge(tabId, owner, text === null ? null : { text, color })) return { ok: false, error: `no tab ${tabId}` };
+          refresh();
+          return { ok: true };
+        }
         case "script.state": {
           const state = workspace.scriptState(request.params.paneId);
           return state ? { ok: true, result: state } : { ok: false, error: `no pane ${request.params.paneId}` };
