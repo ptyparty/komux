@@ -261,6 +261,35 @@ export default {
 - **Popups:** `open` is the command a widget's popup runs. Widgets without one open nothing.
 - **Clock formats** use `dddd ddd YYYY MMM MM DD D HH mm ss`, on a 24 hour clock.
 
+## Keys and plugins
+
+Bind a key to a command, shown in a popup over the tab or opened in a new tab. A key komux already uses, such as Alt n, is refused with the name of what it does, so pick another.
+
+```ts
+export default {
+  keys: [
+    { key: "alt+m", popup: ["ponpoko", "deal"], width: 60, height: 40 },
+    { key: "alt+shift+b", tab: ["btop"] },
+  ],
+};
+```
+
+A plugin is a slice of config, a function returning `tray` widgets and `keys`, which komux adds after the config's own. List plugins under `plugins`:
+
+```ts
+import ponpoko from "./plugins/ponpoko.ts";
+
+export default {
+  plugins: [ponpoko()],
+};
+```
+
+Removing the line removes the plugin. Plugins can't use a key the config or another plugin already binds.
+
+## Event stream
+
+Each session offers a stream of what it sees on `<session>.events.sock` in `$XDG_RUNTIME_DIR/komux/sessions/`: one JSON object per line, starting with a `snapshot` of the tabs and their directories, Claude panes and their states, jobs and the toasts waiting for you, then a line for each change (`tab.opened`, `agent.state`, `job.finished`, `toast.dismissed`, `focus` and others). Every line names its session and the komux server, which changes when komux restarts. Watch it with `socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/komux/sessions/main.events.sock`.
+
 ## Images
 
 When the terminal komux is attached to supports kitty graphics, programs in panes can show images using kitty's Unicode placeholders, the same way they would inside tmux. In fish panes, `kitten icat shot.png` adds `--unicode-placeholder` for you; elsewhere, pass it yourself. The image scrolls and moves with the pane's text, and it shows in tabs and popups.

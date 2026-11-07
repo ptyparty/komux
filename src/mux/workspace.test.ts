@@ -3,6 +3,7 @@ import { paneIds } from "./layout.ts";
 import { configSchema } from "./config.ts";
 import type { ReplyChoice } from "./peek.ts";
 import type { Project } from "./projects.ts";
+import type { KeyBinding } from "./config.ts";
 import { draftKey, Workspace, openedKey, type InputKey, type PaneHost, type RecentTab } from "./workspace.ts";
 
 class FakeHost implements PaneHost {
@@ -118,6 +119,10 @@ class FakeHost implements PaneHost {
   sent: [number, string][] = [];
   sendKeys(id: number, data: string): void {
     this.sent.push([id, data]);
+  }
+  bindings: [number, KeyBinding][] = [];
+  openBinding(near: number, binding: KeyBinding): void {
+    this.bindings.push([near, binding]);
   }
   recent: RecentTab[] = [];
   recentTabs(): RecentTab[] {
@@ -2102,4 +2107,15 @@ describe("review fixes", () => {
     workspace.setAppKeys(1, { app: "remax", groups: [{ name: "Notes", commands: [{ label: "new note", keys: "n", send: "n" }] }] });
     expect(workspace.palette!.matches[workspace.palette!.selected]!.name).toBe(selected);
   });
+
+  test("config keys open their command in a popup or a new tab", () => {
+    const host = new FakeHost();
+    const config = configSchema.parse({ keys: [{ key: "alt+m", popup: ["ponpoko", "deal"] }], plugins: [{ name: "top", keys: [{ key: "alt+shift+t", tab: ["htop"] }] }] });
+    const workspace = new Workspace(host, "/home", config);
+    expect(press(workspace, "alt+m")).toEqual([true]);
+    expect(host.bindings).toEqual([[1, { key: "alt+m", popup: ["ponpoko", "deal"] }]]);
+    press(workspace, "alt+shift+t");
+    expect(workspace.tabs.map((tab) => tab.name)).toContain("htop");
+  });
 });
+

@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultConfig, loadConfig, namedTabs, planLayout, projectLayout, projectTab } from "./config.ts";
+import { configSchema, defaultConfig, loadConfig, namedTabs, planLayout, projectLayout, projectTab } from "./config.ts";
 import { paneRects } from "./layout.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "komux-config-"));
@@ -179,5 +179,27 @@ describe("config", () => {
     const rects = paneRects(plan.root);
     expect(rects.get(10)!.width).toBeCloseTo(1 / 2);
     expect(rects.get(12)).toMatchObject({ y: 0.5, height: 0.5 });
+  });
+});
+
+describe("plugins and keys", () => {
+  test("plugins add their tray widgets and keys after the config's own", () => {
+    const config = configSchema.parse({
+      tray: [{ widget: "clock" }],
+      keys: [{ key: "alt+m", popup: ["deal"] }],
+      plugins: [{ name: "ponpoko", tray: [{ name: "ponpoko", command: ["ponpoko", "tray"] }], keys: [{ key: "alt+r", tab: ["ponpoko"] }] }],
+    });
+    expect(config.tray.map((entry) => ("widget" in entry ? entry.widget : entry.name))).toEqual(["clock", "ponpoko"]);
+    expect(config.keys.map((binding) => binding.key)).toEqual(["alt+m", "alt+r"]);
+    expect("plugins" in config).toBe(false);
+  });
+
+  test("refuses komux's own keys and keys bound twice", () => {
+    const own = configSchema.safeParse({ keys: [{ key: "alt+n", popup: ["deal"] }] });
+    expect(own.success).toBe(false);
+    expect(JSON.stringify(own.error?.issues)).toContain("alt+n is komux's focus down");
+    const twice = configSchema.safeParse({ keys: [{ key: "alt+m", popup: ["a"] }], plugins: [{ name: "ponpoko", keys: [{ key: "alt+m", popup: ["b"] }] }] });
+    expect(JSON.stringify(twice.error?.issues)).toContain("alt+m is already bound by the config");
+    expect(configSchema.safeParse({ keys: [{ key: "alt+m" }] }).success).toBe(false);
   });
 });
