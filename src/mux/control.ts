@@ -21,7 +21,8 @@ export const controlRequest = z.discriminatedUnion("method", [
     method: z.literal("pane.open"),
     params: z.object({
       command: z.array(z.string()).min(1),
-      near: z.number().int(),
+      near: z.number().int().optional().describe("The pane to open beside; the focused pane when left out"),
+      cwd: z.string().optional().describe("Directory to run the command in; the near pane's when left out"),
       placement: z.enum(["right", "below", "tab", "popup"]).default("right"),
       name: z.string().optional(),
       focus: z.boolean().default(true),

@@ -33,7 +33,7 @@ Usage:
   komux claude compose --from-stdin --label LABEL
       From inside a pane, open the message box for this tab's Claude with stdin attached as context.
       The label names the context in the box; on send, the context goes ahead of the message.
-  komux claude [--resume ID|--continue] [--mode MODE] [-- CLAUDE_ARGS...]
+  komux claude [--resume ID|--continue] [--mode MODE] [--prompt TEXT] [-- CLAUDE_ARGS...]
       Run a Claude Code session in this pane with komux drawing the conversation (experimental).
       From anywhere else in the tab, Alt+c sends it a message.
       --mode starts it in default, acceptEdits, plan or auto mode; /mode or Shift+Tab changes it later.
@@ -459,13 +459,13 @@ async function claudeCommand(args: string[]): Promise<void> {
     const attachments = values.attachments ? { file: values.attachments } : values["context-file"] ? { file: values["context-file"], label: values.label ?? "context" } : undefined;
     return runCompose(values.socket, values.name ?? "Claude", attachments);
   }
-  const { values, positionals } = parse(args, { resume: { type: "string" }, continue: { type: "boolean" }, mode: { type: "string" } });
+  const { values, positionals } = parse(args, { resume: { type: "string" }, continue: { type: "boolean" }, mode: { type: "string" }, prompt: { type: "string" } });
   if (values.resume && values.continue) throw new UsageError("pick one of --resume and --continue");
   const { parseMode, permissionModes } = await import("./claude/commands.ts");
   const mode = values.mode === undefined ? undefined : parseMode(values.mode);
   if (values.mode !== undefined && !mode) throw new UsageError(`--mode must be one of ${permissionModes.join(", ")}`);
   const picksItself = ["--resume", "-r", "--continue", "-c", "--session-id", "--fork-session", "--from-pr"];
-  const pick = !values.resume && !values.continue && !positionals.some((arg) => picksItself.includes(arg.split("=")[0]!));
+  const pick = !values.resume && !values.continue && values.prompt === undefined && !positionals.some((arg) => picksItself.includes(arg.split("=")[0]!));
   const claudeArgs = [...(values.resume ? ["--resume", values.resume] : []), ...(values.continue ? ["--continue"] : []), ...(mode ? ["--permission-mode", mode] : []), ...positionals];
   const { claudeOptions } = await import("./claude/options.ts");
   try {
@@ -473,10 +473,7 @@ async function claudeCommand(args: string[]): Promise<void> {
   } catch (error) {
     throw new UsageError((error as Error).message);
   }
-  return runClaude(
-    claudeArgs,
-    { pick },
-  );
+  return runClaude(claudeArgs, { pick, ...(values.prompt !== undefined ? { prompt: values.prompt } : {}) });
 }
 
 async function scriptCommand(args: string[]): Promise<void> {

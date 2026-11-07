@@ -581,11 +581,12 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           return error ? { ok: false, error } : { ok: true };
         }
         case "pane.open": {
-          const { near, placement, command, name, focus, width, height } = request.params;
+          const { placement, command, name, focus, width, height, cwd } = request.params;
+          const near = request.params.near ?? workspace.focused;
           const paneId =
             placement === "popup"
               ? openViewPopup(near, command, name ?? command.join(" "), width === undefined && height === undefined ? undefined : { width: width ?? 80, height: height ?? 80 })
-              : workspace.openPaneNear(near, placement, command, { name, focus });
+              : workspace.openPaneNear(near, placement, command, { name, focus, cwd });
           refresh();
           return paneId === undefined ? { ok: false, error: `no pane ${near}` } : { ok: true, result: { paneId } };
         }

@@ -20,9 +20,9 @@ import type { Attachment } from "../mux/context.ts";
 import { styled } from "../ui/styled.ts";
 import { DraftWatch } from "./draft.ts";
 
-export async function runClaude(args: string[], options: { pick: boolean }): Promise<void> {
+export async function runClaude(args: string[], options: { pick: boolean; prompt?: string }): Promise<void> {
   const renderer = await createCliRenderer({ exitOnCtrlC: false, exitSignals: [], useMouse: true });
-  const queued: string[] = [];
+  const queued: string[] = options.prompt ? [options.prompt] : [];
   let deliverTo: ((text: string) => void) | undefined;
   let session: ClaudeSession | undefined;
   let inbox: Inbox | undefined;

@@ -1040,7 +1040,7 @@ export class Workspace {
     return undefined;
   }
 
-  openPaneNear(near: PaneId, placement: PanePlacement, command: string[], options: { name?: string; focus?: boolean } = {}): PaneId | undefined {
+  openPaneNear(near: PaneId, placement: PanePlacement, command: string[], options: { name?: string; focus?: boolean; cwd?: string } = {}): PaneId | undefined {
     const index = this.tabs.findIndex((tab) => ownPanes(tab).includes(near));
     if (index < 0) return undefined;
     const tab = this.tabs[index]!;
@@ -1049,7 +1049,7 @@ export class Workspace {
     tab.root = placement === "tab" ? addPaneTab(tab.root, anchor, id) : splitPane(tab.root, anchor, placement === "right" ? "row" : "column", id);
     tab.zoomed = false;
     if (options.name) this.paneNames.set(id, options.name);
-    this.host.create(id, this.host.cwd(near), command, tab.id);
+    this.host.create(id, options.cwd ?? this.host.cwd(near), command, tab.id);
     if (options.focus ?? true) {
       this.active = index;
       tab.layoutFocus = id;

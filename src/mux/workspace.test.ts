@@ -614,6 +614,8 @@ describe("Workspace", () => {
     expect(workspace.openPaneNear(1, "below", ["top"])).toBe(5);
     expect(workspace.tab.root).toMatchObject({ children: [{ kind: "split", axis: "column", children: [{ id: 1 }, { id: 5 }] }, {}] });
     expect(workspace.openPaneNear(99, "right", ["top"])).toBeUndefined();
+    expect(workspace.openPaneNear(1, "right", ["claude"], { cwd: "/w/ptyparty" })).toBe(6);
+    expect(host.created.at(-1)).toEqual([6, "/w/ptyparty"]);
   });
 
   test("pane groups: focus moves leave a group's shown pane alone, cycling reaches every member, new panes join the group", () => {

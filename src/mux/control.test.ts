@@ -34,6 +34,7 @@ describe("control socket", () => {
       params: { command: ["htop"], near: 3, placement: "right", focus: true },
     });
     expect(controlRequest.safeParse({ method: "pane.open", params: { command: ["htop"], near: 3, placement: "left" } }).success).toBe(false);
+    expect(controlRequest.parse({ method: "pane.open", params: { command: ["claude"], cwd: "/w" } })).toEqual({ method: "pane.open", params: { command: ["claude"], cwd: "/w", placement: "right", focus: true } });
   });
 
   test("rejects malformed requests without calling the handler", async () => {
