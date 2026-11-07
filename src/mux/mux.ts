@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, ftruncateSync, openSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { ensurePrivateDir, runtimeDir } from "../private-dir.ts";
+import { writeLog } from "../log.ts";
 import type { Config } from "./config.ts";
 import type { ControlRequest, ControlResponse } from "./control.ts";
 import type { GraphicsRelay } from "./graphics.ts";
@@ -16,6 +17,7 @@ import { ReadScheduler } from "./pty.ts";
 import { TabDirs } from "./tab-dirs.ts";
 import { LineTail } from "./tail.ts";
 import { refuseAgentCommand } from "./agent-jobs.ts";
+import { EventStream, type ToastFacts, type World } from "./events.ts";
 import { deliver, draftSocketPath, sendLine } from "../claude/inbox.ts";
 import { bracketedPaste, peekSpec, promptRoute } from "./peek.ts";
 import { theme } from "./theme.ts";
@@ -31,6 +33,7 @@ const longCommandMs = 1_000;
 export type MuxOptions = {
   session: string;
   controlSocket: string;
+  eventSocket?: string;
   config: Config;
   configError?: string;
   graphics: GraphicsRelay;
@@ -53,6 +56,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   const paneEnv = { ...options.config.env, KOMUX_SOCKET: options.controlSocket, KOMUX_SESSION: options.session, KOMUX_SERVER_ID: randomBytes(8).toString("hex") };
   const tabDirs = new TabDirs(join(runtimeDir(), "sessions", options.session, "tabs"));
   let view: MuxView | undefined;
+  let events: EventStream | undefined;
   let stopped = false;
   let pixelSize = "";
 
@@ -111,6 +115,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     }
     workspace.showLongWakeups();
     view?.render();
+    events?.sync();
     syncPixelSize();
     const wait = workspace.popupWaitMs();
     clearTimeout(popupTimer);
@@ -382,6 +387,28 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   });
   view.render();
 
+  const world = (): World => {
+    const tabIds = new Map(workspace.tabs.map((tab) => [tab.id, tab]));
+    const agentJobs = new Set(workspace.jobs.filter((job) => job.agent).map((job) => job.id));
+    return {
+      tabs: workspace.tabs.map((tab, index) => ({ id: tab.id, number: index + 1, name: tab.name, dir: tab.cwd ?? tab.opened?.project.dir ?? host.cwd(tab.layoutFocus) ?? "" })),
+      focus: workspace.tabs.length > 0 ? { tabId: workspace.tab.id, paneId: workspace.focused } : undefined,
+      agents: [...workspace.agents].flatMap(([paneId, state]) => {
+        const tab = workspace.tabOf(paneId);
+        if (!tab) return [];
+        const name = workspace.paneNames.get(paneId) ?? workspace.jobStatus(paneId)?.name;
+        return [{ paneId, tabId: tab.id, state, ...(name ? { name } : {}), ...(paneSessions.has(paneId) ? { sessionId: paneSessions.get(paneId) } : {}) }];
+      }),
+      jobs: workspace.jobs.filter((job) => tabIds.has(job.tabId)).map((job) => ({ id: job.id, tabId: job.tabId, name: job.name, state: job.state, code: job.code, agent: agentJobs.has(job.id) })),
+      toasts: workspace.toasts().flatMap((toast): ToastFacts[] => {
+        if (toast.kind === "reply" && !toast.brief) return [{ kind: "reply", id: toast.id, tabId: toast.tab.id }];
+        if (toast.kind === "job" && toast.job.state === "failed") return [{ kind: "job", id: toast.job.id, tabId: toast.tab.id }];
+        return [];
+      }),
+    };
+  };
+  events = startEvents(options, world);
+
   const openPopup = (title: string, command: string[], askingPane: PaneId | undefined) => {
     const id = workspace.reservePaneId();
     spawnPane(id, host.cwd(askingPane ?? workspace.focused), command, (exited) => workspace.popupExited(exited), { frameless: true });
@@ -441,6 +468,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     stopped = true;
     clearInterval(titles);
     tray.stop();
+    events?.stop();
     recentTabs.flush();
     clearTimeout(popupTimer);
     clearTimeout(leaderTimer);
@@ -645,4 +673,14 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     },
     shutdown,
   };
+}
+
+function startEvents(options: MuxOptions, world: () => World): EventStream | undefined {
+  if (!options.eventSocket) return undefined;
+  try {
+    return new EventStream(options.eventSocket, options.session, world);
+  } catch (error) {
+    writeLog(error);
+    return undefined;
+  }
 }

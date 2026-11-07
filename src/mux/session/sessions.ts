@@ -11,7 +11,7 @@ const startTimeoutMs = 5000;
 
 export class SessionError extends Error {}
 
-export type SessionPaths = { client: string; control: string; log: string; lock: string };
+export type SessionPaths = { client: string; control: string; events: string; log: string; lock: string };
 
 export type SessionInfo = { session: string; tabs: number; panes: number; attached: number };
 
@@ -23,6 +23,7 @@ export function sessionPaths(name: string): SessionPaths {
   return {
     client: join(dir, `${name}.sock`),
     control: join(dir, `${name}.control.sock`),
+    events: join(dir, `${name}.events.sock`),
     log: join(dir, `${name}.log`),
     lock: join(dir, `${name}.lock`),
   };
