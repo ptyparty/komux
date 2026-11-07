@@ -27,6 +27,7 @@ export async function runClaude(args: string[], options: { pick: boolean; prompt
   let session: ClaudeSession | undefined;
   let inbox: Inbox | undefined;
   let choice: Choice | undefined = { kind: "new" };
+  let started: Start | undefined;
   const leave = () => {
     void (inbox?.stop() ?? Promise.resolve()).finally(() => {
       renderer.destroy();
@@ -47,9 +48,11 @@ export async function runClaude(args: string[], options: { pick: boolean; prompt
           return session?.transcript.mode;
         },
         wokenAgain: () => void (session ? undefined : showIfJob()),
+        onStart: (start) => void (started ??= start),
       });
     }
-    if (inbox) choice = await wakeAndChoose(renderer, inbox);
+    if (inbox) choice = await wakeAndChoose(renderer, inbox, () => started);
+    if (started?.prompt) queued.push(started.prompt);
     else {
       if (process.env.KOMUX_SOCKET) await offerSetup(renderer);
       if (options.pick) choice = await chooseSession(renderer);
@@ -123,7 +126,7 @@ export async function runClaude(args: string[], options: { pick: boolean; prompt
       for (const text of queued.splice(0)) deliverTo(text);
       if (first && awaken && inbox) {
         await inbox.awaken();
-        await requestCompose();
+        if (!started?.prompt) await requestCompose();
       }
       const ended = target.exited.then((code) => ({ how: "quit" as const, code }));
       const outcome = await Promise.race([quitting.then((how) => ({ how, code: 0 })), leaving.then((how) => ({ how, code: 0 })), ended]);
@@ -272,10 +275,14 @@ function runningAsJob(): boolean {
   return Boolean(control) && job !== undefined && job === pane;
 }
 
-async function wakeAndChoose(renderer: CliRenderer, inbox: Inbox): Promise<Choice | undefined> {
+type Start = { resume?: string; prompt?: string };
+
+async function wakeAndChoose(renderer: CliRenderer, inbox: Inbox, preset: () => Start | undefined): Promise<Choice | undefined> {
   let setupOffered = false;
   for (;;) {
     await dormant(renderer, inbox);
+    const start = preset();
+    if (start) return start.resume ? { kind: "resume", sessionId: start.resume } : { kind: "new" };
     if (!setupOffered) {
       await offerSetup(renderer);
       setupOffered = true;
@@ -332,7 +339,15 @@ function requestCompose(): Promise<void> {
 
 async function openInbox(
   onText: (text: string) => void,
-  options: { dormant?: boolean; commands?: () => SlashCommand[]; mode?: () => string | undefined; session?: () => string | undefined; cycleMode?: () => string | undefined; wokenAgain?: () => void } = {},
+  options: {
+    dormant?: boolean;
+    commands?: () => SlashCommand[];
+    mode?: () => string | undefined;
+    session?: () => string | undefined;
+    cycleMode?: () => string | undefined;
+    wokenAgain?: () => void;
+    onStart?: (start: Start) => void;
+  } = {},
 ): Promise<Inbox | undefined> {
   const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane, KOMUX_TAB_DIR: dir } = process.env;
   const paneId = Number(pane);
@@ -349,8 +364,11 @@ async function openInbox(
         buffers.set(socket, lines.pop()!);
         for (const line of lines) {
           try {
-            const { text, wake: woken, commands, cycleMode } = JSON.parse(line) as { text?: unknown; wake?: unknown; commands?: unknown; cycleMode?: unknown };
-            if (cycleMode === true) socket.write(`${JSON.stringify({ mode: options.cycleMode?.() })}\n`);
+            const { text, wake: woken, commands, cycleMode, start } = JSON.parse(line) as { text?: unknown; wake?: unknown; commands?: unknown; cycleMode?: unknown; start?: { resume?: unknown; prompt?: unknown } };
+            if (start && typeof start === "object" && wake) {
+              options.onStart?.({ ...(typeof start.resume === "string" ? { resume: start.resume } : {}), ...(typeof start.prompt === "string" && start.prompt.trim() ? { prompt: start.prompt } : {}) });
+              wake();
+            } else if (cycleMode === true) socket.write(`${JSON.stringify({ mode: options.cycleMode?.() })}\n`);
             else if (commands === true) socket.write(`${JSON.stringify({ commands: options.commands?.() ?? [], mode: options.mode?.(), session: options.session?.() })}\n`);
             else if (woken === true) (wake ?? options.wokenAgain)?.();
             else if (typeof text === "string" && text.trim()) onText(text.trim());

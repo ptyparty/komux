@@ -43,7 +43,7 @@ export type MuxOptions = {
 };
 
 export type Mux = {
-  handleControl: (request: ControlRequest) => ControlResponse;
+  handleControl: (request: ControlRequest) => ControlResponse | Promise<ControlResponse>;
   counts: () => { tabs: number; panes: number };
   setClients: (count: number) => void;
   shutdown: () => void;
@@ -579,6 +579,33 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           const error = workspace.openProject(target, true, { layout, args });
           refresh();
           return error ? { ok: false, error } : { ok: true };
+        }
+        case "claude.start": {
+          const { target, resume, prompt } = request.params;
+          const error = workspace.openProject(target, true, {});
+          refresh();
+          if (error) return { ok: false, error };
+          const tab = workspace.tab;
+          return (async (): Promise<ControlResponse> => {
+            for (let tries = 0; tries < 50; tries++) {
+              const claudes = workspace.tabPanes(tab).filter((id) => nativeClaudes.has(id));
+              const already = resume ? claudes.find((id) => paneSessions.get(id) === resume) : undefined;
+              if (already !== undefined) {
+                if (workspace.jobStatus(already)) workspace.openJob(already);
+                else workspace.focusPane(already);
+                refresh();
+                return { ok: true, result: { paneId: already } };
+              }
+              const waiting = claudes.find((id) => workspace.dormant.has(id));
+              if (waiting !== undefined) {
+                await sendLine(nativeClaudes.get(waiting)!, { start: { ...(resume ? { resume } : {}), ...(prompt ? { prompt } : {}) } });
+                return { ok: true, result: { paneId: waiting } };
+              }
+              if (claudes.length > 0) return { ok: false, error: "busy: Claude is already running in that tab" };
+              await Bun.sleep(100);
+            }
+            return { ok: false, error: "none: no Claude waiting in that tab" };
+          })();
         }
         case "pane.open": {
           const { placement, command, name, focus, width, height, cwd } = request.params;

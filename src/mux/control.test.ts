@@ -37,6 +37,11 @@ describe("control socket", () => {
     expect(controlRequest.parse({ method: "pane.open", params: { command: ["claude"], cwd: "/w" } })).toEqual({ method: "pane.open", params: { command: ["claude"], cwd: "/w", placement: "right", focus: true } });
   });
 
+  test("claude.start names a project, and a session to resume or a first prompt", () => {
+    expect(controlRequest.parse({ method: "claude.start", params: { target: "/w/ptyparty", resume: "c1" } })).toEqual({ method: "claude.start", params: { target: "/w/ptyparty", resume: "c1" } });
+    expect(controlRequest.safeParse({ method: "claude.start", params: { target: "" } }).success).toBe(false);
+  });
+
   test("rejects malformed requests without calling the handler", async () => {
     stop = serveControl(path, () => {
       throw new Error("should not be called");

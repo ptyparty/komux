@@ -14,6 +14,14 @@ export const controlRequest = z.discriminatedUnion("method", [
     ]),
   }),
   z.object({
+    method: z.literal("claude.start"),
+    params: z.object({
+      target: z.string().min(1).describe("The project directory whose tab holds the Claude"),
+      resume: z.string().min(1).optional().describe("A session to resume; a new conversation when left out"),
+      prompt: z.string().min(1).optional().describe("The first message of a new conversation"),
+    }),
+  }),
+  z.object({
     method: z.literal("agent.state"),
     params: z.object({ paneId: z.number().int(), state: z.enum(["working", "waiting", "done", "clear"]), detail: z.string().optional(), sessionId: z.string().min(1).optional(), reply: z.string().optional(), toast: z.enum(["brief", "none"]).optional(), wakeup: z.boolean().optional() }),
   }),
