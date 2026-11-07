@@ -57,4 +57,22 @@ describe("tray", () => {
     await settle(tray, () => tray.texts[0] !== "");
     expect(tray.texts).toEqual(["nope !"]);
   });
+
+  test("a streaming widget shows each new line, coloured when it says so", async () => {
+    const script = 'echo "first"; sleep 0.1; echo \'{"text":"● 2 yours","color":"warning"}\'; sleep 5';
+    const seen: string[] = [];
+    const tray = new Tray(trayWidgets(configSchema.parse({ tray: [{ name: "moves", stream: ["sh", "-c", script] }] }).tray), () => seen.push(tray.texts[0]!));
+    tray.start();
+    await settle(tray, () => tray.colors[0] !== undefined);
+    expect(seen).toEqual(["first", "● 2 yours"]);
+    expect(tray.colors).toEqual(["warning"]);
+  });
+
+  test("a streaming widget that exits shows as broken until it restarts", async () => {
+    const tray = new Tray(trayWidgets(configSchema.parse({ tray: [{ name: "gone", stream: ["true"] }] }).tray), () => {});
+    tray.start();
+    await settle(tray, () => tray.texts[0] !== "");
+    expect(tray.texts).toEqual(["gone !"]);
+  });
 });
+
