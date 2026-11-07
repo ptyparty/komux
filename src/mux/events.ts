@@ -66,16 +66,17 @@ export function worldChanges(before: World, after: World): StreamEvent[] {
 export class EventStream {
   private readonly subscribers = new Set<Socket<undefined>>();
   private world: World = emptyWorld;
-  private readonly server: ReturnType<typeof Bun.listen<undefined>>;
+  private readonly listener: ReturnType<typeof Bun.listen<undefined>>;
 
   constructor(
     private readonly path: string,
     private readonly session: string,
+    private readonly server: string,
     private readonly current: () => World,
     private readonly now: () => number = Date.now,
   ) {
     rmSync(path, { force: true });
-    this.server = Bun.listen<undefined>({
+    this.listener = Bun.listen<undefined>({
       unix: path,
       socket: {
         open: (socket) => {
@@ -105,11 +106,11 @@ export class EventStream {
   }
 
   stop(): void {
-    this.server.stop(true);
+    this.listener.stop(true);
     rmSync(this.path, { force: true });
   }
 
   private line(event: StreamEvent): string {
-    return `${JSON.stringify({ session: this.session, at: this.now(), ...event })}\n`;
+    return `${JSON.stringify({ session: this.session, server: this.server, at: this.now(), ...event })}\n`;
   }
 }
