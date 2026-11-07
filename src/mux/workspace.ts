@@ -1,6 +1,6 @@
 import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId } from "./layout.ts";
-import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type KeyBinding, type LayoutEntry, type LayoutSpec } from "./config.ts";
-import { keyName, leaderKey, lookup, type Binding, type Command, type Key, type Mode } from "./keymap.ts";
+import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type KeyBinding, type KeyMode, type LayoutEntry, type LayoutSpec } from "./config.ts";
+import { keyName, leaderKey, lookup, showKey, type Binding, type Command, type Key, type Mode } from "./keymap.ts";
 import type { AppKeys } from "./context.ts";
 import { fuzzyScore, paletteEntries, rankEntries, type Palette, type PaletteEntry } from "./palette.ts";
 import type { QuietToast } from "./control.ts";
@@ -23,6 +23,7 @@ export type Tab = {
   drawerSpec?: DrawerSpec;
   drawer?: Drawer;
   opened?: Opened;
+  labels?: Record<string, string>;
   focusedAt: number;
 };
 export type RecentTab = Opened & { title: string; at: number };
@@ -147,6 +148,7 @@ export class Workspace {
   private leaderAt = Number.NEGATIVE_INFINITY;
   private leaderForced = false;
   lockLeader = false;
+  keyMode: KeyMode | undefined;
 
   constructor(
     private readonly host: PaneHost,
@@ -730,6 +732,10 @@ export class Workspace {
     return true;
   }
 
+  askingPanes(): Set<PaneId> {
+    return new Set(this.popups.flatMap((popup) => (popup.kind === "ask" && popup.askingPane !== undefined ? [popup.askingPane] : [])));
+  }
+
   tabAttention(tab: Tab): AgentState | undefined {
     if (this.popupsWaiting(tab) > 0) return "waiting";
     let most: AgentState | undefined;
@@ -883,6 +889,13 @@ export class Workspace {
       return true;
     }
     if (popup && this.mode === "normal" && !popupPassthrough.has(keyName(key))) return false;
+    if (this.mode === "custom") return this.customModeKey(key);
+    const enters = this.mode === "leader" ? this.config.modes.find((mode) => mode.key === keyName(key)) : undefined;
+    if (enters) {
+      this.keyMode = enters;
+      this.mode = "custom";
+      return true;
+    }
     const binding = lookup(this.mode, key);
     if (binding?.command.type === "dismiss-toast" && this.toasts().length === 0) return false;
     if (binding?.command.type === "pass") {
@@ -901,6 +914,20 @@ export class Workspace {
     }
     if (this.mode === "normal" && this.host.isHeld(this.focused)) return this.heldKey(key);
     return this.mode !== "normal";
+  }
+
+  keyModes(): KeyMode[] {
+    return this.config.modes;
+  }
+
+  private customModeKey(key: InputKey): boolean {
+    const mode = this.keyMode;
+    this.mode = "normal";
+    this.keyMode = undefined;
+    const binding = mode?.keys.find((candidate) => candidate.key === keyName(key));
+    if (binding) this.runConfiguredKey(binding);
+    else if (mode && keyName(key) !== "escape") this.message = `Nothing is on Ctrl Space ${showKey(mode.key)} ${showKeyName(key)}`;
+    return true;
   }
 
   private runConfiguredKey(binding: KeyBinding): void {
@@ -965,6 +992,13 @@ export class Workspace {
     this.leaveDrawer(this.tab);
     this.seeReply(id);
     this.selectFocusedTabs();
+  }
+
+  focusTab(id: number): boolean {
+    const index = this.tabs.findIndex((tab) => tab.id === id);
+    if (index < 0) return false;
+    this.active = index;
+    return true;
   }
 
   zoomPane(id: PaneId, zoomed: boolean): boolean | undefined {
@@ -1357,6 +1391,7 @@ export class Workspace {
       cwd,
       drawerSpec: options.layout?.drawer,
       opened: options.opened,
+      ...(options.layout?.labels ? { labels: options.layout.labels } : {}),
       focusedAt: this.now(),
     };
     this.tabs.splice(this.tabs.length === 0 ? 0 : this.active + 1, 0, tab);

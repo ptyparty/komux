@@ -33,6 +33,7 @@ export const theme = {
     tray: "#6fcff5",
     resize: "#e0c27d",
     locked: "#ff6b6b",
+    custom: "#f7a072",
   },
   syntax: {
     keyword: "#c89dff",

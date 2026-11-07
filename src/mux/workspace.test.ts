@@ -168,6 +168,18 @@ describe("Workspace", () => {
     expect(workspace.tab.zoomed).toBe(false);
   });
 
+  test("focusing a tab shows it as you left it, without focusing any pane in it", () => {
+    const workspace = new Workspace(new FakeHost());
+    press(workspace, "alt+d");
+    const first = workspace.tab.id;
+    const focused = workspace.focused;
+    press(workspace, "ctrl+space", "t", "c");
+    expect(workspace.focusTab(first)).toBe(true);
+    expect(workspace.tab.id).toBe(first);
+    expect(workspace.focused).toBe(focused);
+    expect(workspace.focusTab(999)).toBe(false);
+  });
+
   test("an open, focused drawer zooms the drawer rather than the layout", () => {
     const workspace = new Workspace(new FakeHost());
     press(workspace, "alt+d");
@@ -378,6 +390,7 @@ describe("Workspace", () => {
     expect(workspace.popup).toBeUndefined();
     expect(workspace.popupsWaiting(workspace.tabs[0]!)).toBe(1);
     expect(workspace.tabAttention(workspace.tabs[0]!)).toBe("waiting");
+    expect([...workspace.askingPanes()]).toEqual([1]);
     expect(press(workspace, "a")).toEqual([false]);
     press(workspace, "ctrl+space", "t", "h", "escape");
     clock.now += 2000;
@@ -2116,6 +2129,30 @@ describe("review fixes", () => {
     expect(host.bindings).toEqual([[1, { key: "alt+m", popup: ["ponpoko", "deal"] }]]);
     press(workspace, "alt+shift+t");
     expect(workspace.tabs.map((tab) => tab.name)).toContain("htop");
+  });
+
+  test("a config mode is one key on the leader, and each of its keys runs once and leaves it", () => {
+    const host = new FakeHost();
+    const deal = { key: "m", popup: ["ponpoko", "deal"], name: "your move" };
+    const open = { key: "o", popup: ["ponpoko"], name: "ponpoko" };
+    const config = configSchema.parse({ plugins: [{ name: "ponpoko", modes: [{ key: "m", name: "ponpoko", keys: [deal, { key: "shift+m", popup: ["ponpoko", "deal", "--unseen"] }, open] }] }] });
+    const workspace = new Workspace(host, "/home", config);
+    press(workspace, "ctrl+space", "m");
+    expect(workspace.mode).toBe("custom");
+    expect(workspace.keyMode?.name).toBe("ponpoko");
+    press(workspace, "m");
+    expect(workspace.mode).toBe("normal");
+    press(workspace, "ctrl+space", "m", "o");
+    press(workspace, "ctrl+space", "m", "shift+m");
+    expect(host.bindings.map(([, binding]) => binding.popup)).toEqual([["ponpoko", "deal"], ["ponpoko"], ["ponpoko", "deal", "--unseen"]]);
+    press(workspace, "ctrl+space", "m", "q");
+    expect(workspace.mode).toBe("normal");
+    expect(workspace.message).toBe("Nothing is on Ctrl Space m q");
+    workspace.message = undefined;
+    press(workspace, "ctrl+space", "m", "escape");
+    expect(workspace.mode).toBe("normal");
+    expect(workspace.message).toBeUndefined();
+    expect(host.bindings).toHaveLength(3);
   });
 
   test("tab badges put komux's own first, then other programs' by owner", () => {

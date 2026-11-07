@@ -1,6 +1,6 @@
 import type { Axis, Direction } from "./layout.ts";
 
-export type Mode = "normal" | "leader" | "locked" | "pane" | "tab" | "session" | "tray" | "jobs" | "resize";
+export type Mode = "normal" | "leader" | "locked" | "pane" | "tab" | "session" | "tray" | "jobs" | "resize" | "custom";
 
 export type Command =
   | { type: "mode"; mode: Mode }
@@ -257,6 +257,12 @@ export const keymap: Record<Mode, ModeKeys> = {
       { keys: "↑/k/t", description: "taller" },
       { keys: "↓/j/n", description: "shorter" },
     ],
+  },
+  custom: {
+    title: "custom",
+    about: "keys from the config or a plugin",
+    bindings: [{ keys: ["escape"], command: { type: "mode", mode: "normal" } }],
+    hints: [],
   },
   session: {
     title: "session",

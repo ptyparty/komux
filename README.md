@@ -130,6 +130,7 @@ Every project opened with `ide` gets an editor, a shell, and a [native Claude](#
 
 - **Named tabs:** `tabs: { home: { layout: "ide", cwd: "~/work" } }` defines a tab with its own layout and working directory. Named tabs appear in the tab switcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
 - **Args:** a layout with `args: ["pr"]` is opened by `komux project --layout pr-review --arg pr=12`, which fills `{pr}` into its commands, job names, drawer, and tab `name`, along with `{project}`. `name: "{project} #{pr}"` gives each PR its own tab, so the same args switch back to it. Such a layout can't be a project's or named tab's default.
+- **Labels:** `labels: { braid: "sc-{story}" }` tags the layout's tabs for other programs, such as ponpoko, which read them from the event stream. `{project}` and the args are filled in the same way.
 - **Repos:** `komux project --repo ptyparty/komux` opens the clone under `projects.roots` whose path ends in `ptyparty/komux`.
 - **Startup:** `startup: ["home"]` opens those named tabs when a session starts, instead of a plain tab.
 - **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab. A job can put its socket there for the tab's panes to find.
@@ -275,7 +276,25 @@ export default {
 };
 ```
 
-A plugin is a slice of config, a function returning `tray` widgets, `keys` and `run` helpers, which komux adds after the config's own. A helper is a program komux runs for as long as the session lives, restarting it five seconds after it exits and stopping it when the session ends. It gets the same environment as a pane, plus `KOMUX_EVENTS_SOCKET`, the session's event stream. List plugins under `plugins`:
+A mode puts a group of keys behind one key on the leader. Ctrl Space and the mode's key show its card, and each key in it runs once and goes back to normal; Esc leaves without running anything. Modes are listed under More on the Ctrl Space card, and can't take a key the leader already uses.
+
+```ts
+export default {
+  modes: [
+    {
+      key: "m",
+      name: "ponpoko",
+      about: "whose move",
+      keys: [
+        { key: "m", popup: ["ponpoko", "deal"], name: "your move" },
+        { key: "o", popup: ["ponpoko"], name: "overview" },
+      ],
+    },
+  ],
+};
+```
+
+A plugin is a slice of config, a function returning `tray` widgets, `keys`, `modes` and `run` helpers, which komux adds after the config's own. A helper is a program komux runs for as long as the session lives, restarting it five seconds after it exits and stopping it when the session ends. It gets the same environment as a pane, plus `KOMUX_EVENTS_SOCKET`, the session's event stream. List plugins under `plugins`:
 
 ```ts
 import ponpoko from "./plugins/ponpoko.ts";
@@ -289,7 +308,7 @@ Removing the line removes the plugin. Plugins can't use a key the config or anot
 
 ## Event stream
 
-Each session offers a stream of what it sees on `<session>.events.sock` in `$XDG_RUNTIME_DIR/komux/sessions/`: one JSON object per line, starting with a `snapshot` of the tabs and their directories, Claude panes and their states, jobs and the toasts waiting for you, then a line for each change (`tab.opened`, `agent.state`, `job.finished`, `toast.dismissed`, `focus` and others). Every line names its session and the komux server, which changes when komux restarts. Watch it with `socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/komux/sessions/main.events.sock`.
+Each session offers a stream of what it sees on `<session>.events.sock` in `$XDG_RUNTIME_DIR/komux/sessions/`: one JSON object per line, starting with a `snapshot` of the tabs with their directories and layout labels, Claude panes with their states and whether they have a question open, jobs and the toasts waiting for you, then a line for each change (`tab.opened`, `agent.state`, `job.finished`, `toast.dismissed`, `focus` and others). Every line names its session and the komux server, which changes when komux restarts. Watch it with `socat - UNIX-CONNECT:$XDG_RUNTIME_DIR/komux/sessions/main.events.sock`.
 
 ## Tab badges
 

@@ -36,6 +36,12 @@ describe("worldChanges", () => {
     expect(worldChanges(after, { ...after, toasts: [] })).toEqual([{ type: "toast.dismissed", toast: { kind: "job", id: 3, tabId: 1 } }]);
   });
 
+  test("reports a tab's labels changing and an agent starting to ask", () => {
+    const labelled: World = { ...world, tabs: [{ ...tab, labels: { braid: "sc-1" } }], agents: [{ paneId: 2, tabId: 1, state: "working", asking: true }] };
+    expect(worldChanges(world, labelled).map((event) => event.type)).toEqual(["tab.changed", "agent.state"]);
+    expect(worldChanges(labelled, labelled)).toEqual([]);
+  });
+
   test("reports agents, jobs and tabs that went away", () => {
     expect(worldChanges(world, { ...emptyWorld }).map((event) => event.type)).toEqual(["agent.gone", "job.closed", "tab.closed"]);
   });
