@@ -49,7 +49,7 @@ describe("EventStream", () => {
   test("sends a snapshot to a new subscriber, then changes", async () => {
     let current = world;
     const path = join(dir, "events.sock");
-    const stream = new EventStream(path, "main", () => current, () => 42);
+    const stream = new EventStream(path, "main", "s1", () => current, () => 42);
     const lines: unknown[] = [];
     let buffer = "";
     const socket = await Bun.connect({
@@ -68,8 +68,8 @@ describe("EventStream", () => {
     stream.sync();
     await waitFor(() => lines.length === 2);
     expect(lines).toEqual([
-      { session: "main", at: 42, type: "snapshot", ...world },
-      { session: "main", at: 42, type: "tab.changed", tab: { ...tab, name: "renamed" } },
+      { session: "main", server: "s1", at: 42, type: "snapshot", ...world },
+      { session: "main", server: "s1", at: 42, type: "tab.changed", tab: { ...tab, name: "renamed" } },
     ]);
     socket.end();
     stream.stop();

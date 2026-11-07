@@ -408,7 +408,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
       }),
     };
   };
-  events = startEvents(options, world);
+  events = startEvents(options, paneEnv.KOMUX_SERVER_ID, world);
 
   const openPopup = (title: string, command: string[], askingPane: PaneId | undefined) => {
     const id = workspace.reservePaneId();
@@ -676,10 +676,10 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
   };
 }
 
-function startEvents(options: MuxOptions, world: () => World): EventStream | undefined {
+function startEvents(options: MuxOptions, server: string, world: () => World): EventStream | undefined {
   if (!options.eventSocket) return undefined;
   try {
-    return new EventStream(options.eventSocket, options.session, world);
+    return new EventStream(options.eventSocket, options.session, server, world);
   } catch (error) {
     writeLog(error);
     return undefined;
