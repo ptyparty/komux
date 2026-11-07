@@ -393,9 +393,10 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     return {
       tabs: workspace.tabs.map((tab, index) => ({ id: tab.id, number: index + 1, name: tab.name, dir: tab.cwd ?? tab.opened?.project.dir ?? host.cwd(tab.layoutFocus) ?? "" })),
       focus: workspace.tabs.length > 0 ? { tabId: workspace.tab.id, paneId: workspace.focused } : undefined,
-      agents: [...workspace.agents].flatMap(([paneId, state]) => {
+      agents: [...new Set([...workspace.agents.keys(), ...paneSessions.keys(), ...nativeClaudes.keys()])].flatMap((paneId) => {
         const tab = workspace.tabOf(paneId);
         if (!tab) return [];
+        const state = workspace.agents.get(paneId) ?? "idle";
         const name = workspace.paneNames.get(paneId) ?? workspace.jobStatus(paneId)?.name;
         return [{ paneId, tabId: tab.id, state, ...(name ? { name } : {}), ...(paneSessions.has(paneId) ? { sessionId: paneSessions.get(paneId) } : {}) }];
       }),
