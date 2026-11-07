@@ -4,7 +4,7 @@ import type { PaneId } from "./layout.ts";
 import type { AgentState, JobState } from "./workspace.ts";
 
 export type TabFacts = { id: number; number: number; name: string; dir: string };
-export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState; name?: string; sessionId?: string };
+export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState | "idle"; name?: string; sessionId?: string };
 export type JobFacts = { id: PaneId; tabId: number; name: string; state: JobState; code?: number | null; agent: boolean };
 export type ToastFacts = { kind: "reply" | "job"; id: PaneId; tabId: number };
 export type World = { tabs: TabFacts[]; focus: { tabId: number; paneId: PaneId } | undefined; agents: AgentFacts[]; jobs: JobFacts[]; toasts: ToastFacts[] };
