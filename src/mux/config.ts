@@ -5,7 +5,8 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { leaf, type LayoutNode, type PaneId } from "./layout.ts";
 import { expandHome, type Project } from "./projects.ts";
-import { defaultTray, trayEntry } from "./tray.ts";
+import { keymap } from "./keymap.ts";
+import { defaultTray, trayEntry, type TrayEntry } from "./tray.ts";
 
 export type PaneSpec = { command?: string[]; name?: string; focus?: boolean };
 export type SplitSpec = { row: LayoutSpec[] } | { column: LayoutSpec[] };
@@ -68,6 +69,30 @@ const layoutEntry: z.ZodType<LayoutEntry, unknown> = z
   }))
   .pipe(z.object({ jobs: z.custom<JobSpec[]>(), drawer: z.custom<DrawerSpec>().optional(), args: z.custom<string[]>().optional(), name: z.string().optional(), layout: layoutSpec }));
 
+const keyBinding = z
+  .object({
+    key: z.string().regex(/^((ctrl|alt|shift)\+)*[^\s+]+$/, "keys look like \"alt+m\" or \"ctrl+alt+r\"").describe("Key, such as \"alt+m\""),
+    popup: z.array(z.string()).min(1).optional().describe("Command shown in a popup over the tab"),
+    tab: z.array(z.string()).min(1).optional().describe("Command opened in a new tab"),
+    name: z.string().optional().describe("Popup title or tab name; defaults to the program's name"),
+    width: z.number().min(10).max(100).optional().describe("Popup width, percent of the screen"),
+    height: z.number().min(10).max(100).optional().describe("Popup height, percent of the screen"),
+  })
+  .strict()
+  .refine((binding) => (binding.popup === undefined) !== (binding.tab === undefined), "give a key either popup or tab");
+
+export type KeyBinding = z.infer<typeof keyBinding>;
+
+const plugin = z
+  .object({
+    name: z.string().optional(),
+    tray: z.array(trayEntry).default([]).describe("Widgets added after the config's own"),
+    keys: z.array(keyBinding).default([]).describe("Key bindings added after the config's own"),
+  })
+  .strict();
+
+export type Plugin = z.input<typeof plugin>;
+
 export const configSchema = z
   .object({
     defaultCwd: z.string().optional().describe("Directory for new tabs; defaults to the focused pane's directory"),
@@ -84,6 +109,8 @@ export const configSchema = z
       .describe("Named tabs, opened from the tab switcher or komux project like projects"),
     tray: z.array(trayEntry).default(defaultTray).describe("Widgets on the right of the mode bar, such as { widget: \"clock\" }, { widget: \"system\" }, or { command: [...] }"),
     startup: z.array(z.string()).default([]).describe("Named tabs a new session opens instead of a plain tab"),
+    keys: z.array(keyBinding).default([]).describe("Keys that open a command in a popup or a new tab, such as { key: \"alt+m\", popup: [\"htop\"] }"),
+    plugins: z.array(plugin).default([]).describe("Slices of config from plugins, each adding tray widgets and keys"),
     projects: z
       .object({
         roots: z.array(z.string()).default(["~/work/*/*"]),
@@ -104,7 +131,21 @@ export const configSchema = z
       if (!(name in config.tabs)) ctx.addIssue({ code: "custom", path: ["startup", index], message: `no tab named ${name}` });
     });
     for (const [project, layout] of Object.entries(config.projects.layoutFor)) checkLayout(layout, ["projects", "layoutFor", project]);
-  });
+    const seen = new Map<string, string>();
+    const checkKey = (binding: KeyBinding, path: (string | number)[], owner: string) => {
+      const builtIn = keymap.normal.bindings.find((candidate) => candidate.keys.includes(binding.key));
+      if (builtIn) ctx.addIssue({ code: "custom", path, message: `${binding.key} is komux's ${builtIn.name ?? "own key"}; pick another key` });
+      else if (seen.has(binding.key)) ctx.addIssue({ code: "custom", path, message: `${binding.key} is already bound by ${seen.get(binding.key)}` });
+      else seen.set(binding.key, owner);
+    };
+    config.keys.forEach((binding, index) => checkKey(binding, ["keys", index, "key"], "the config"));
+    config.plugins.forEach((entry, index) => entry.keys.forEach((binding, at) => checkKey(binding, ["plugins", index, "keys", at, "key"], entry.name ?? `plugin ${index + 1}`)));
+  })
+  .transform(({ plugins, ...config }) => ({
+    ...config,
+    tray: [...config.tray, ...plugins.flatMap((entry): TrayEntry[] => entry.tray)],
+    keys: [...config.keys, ...plugins.flatMap((entry) => entry.keys)],
+  }));
 
 export type Config = z.infer<typeof configSchema>;
 

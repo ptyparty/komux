@@ -1,5 +1,5 @@
 import { addToFirstTabs, inPaneTabs, selectPaneTab, leaf, neighbor, paneIds, paneRects, paneTabSibling, removePane, splitPane, swapPanes, addPaneTab, type Axis, type Direction, type LayoutNode, type PaneId } from "./layout.ts";
-import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type LayoutEntry, type LayoutSpec } from "./config.ts";
+import { defaultConfig, namedTabs, planLayout, projectTab, type Config, type DrawerSpec, type JobSpec, type KeyBinding, type LayoutEntry, type LayoutSpec } from "./config.ts";
 import { keyName, leaderKey, lookup, type Binding, type Command, type Key, type Mode } from "./keymap.ts";
 import type { AppKeys } from "./context.ts";
 import { fuzzyScore, paletteEntries, rankEntries, type Palette, type PaletteEntry } from "./palette.ts";
@@ -96,6 +96,7 @@ export interface PaneHost {
   askKeys(id: PaneId): void;
   sendKeys(id: PaneId, data: string): void;
   recentTabs(): RecentTab[];
+  openBinding(near: PaneId, binding: KeyBinding): void;
   rememberTab(tab: RecentTab): void;
 }
 
@@ -853,6 +854,11 @@ export class Workspace {
     if (finishedJob && this.mode === "normal" && !popupPassthrough.has(keyName(key))) {
       return this.finishedJobKey(popup!.id, key);
     }
+    const configured = this.mode === "normal" ? this.config.keys.find((candidate) => candidate.key === keyName(key)) : undefined;
+    if (configured) {
+      this.runConfiguredKey(configured);
+      return true;
+    }
     if (popup && this.mode === "normal" && !popupPassthrough.has(keyName(key))) return false;
     const binding = lookup(this.mode, key);
     if (binding?.command.type === "dismiss-toast" && this.toasts().length === 0) return false;
@@ -872,6 +878,15 @@ export class Workspace {
     }
     if (this.mode === "normal" && this.host.isHeld(this.focused)) return this.heldKey(key);
     return this.mode !== "normal";
+  }
+
+  private runConfiguredKey(binding: KeyBinding): void {
+    if (binding.tab) {
+      const name = binding.name ?? binding.tab[0]!;
+      this.openTab(this.host.cwd(this.focused), { name, layout: { jobs: [], layout: { command: binding.tab, name } } });
+      return;
+    }
+    this.host.openBinding(this.focused, binding);
   }
 
   private lockedKey(key: InputKey): boolean {

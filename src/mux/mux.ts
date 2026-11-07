@@ -356,6 +356,10 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     },
     sendKeys: (id, data) => panes.get(id)?.type(data),
     recentTabs: () => recentTabs.list(),
+    openBinding: (near, binding) => {
+      const size = binding.width === undefined && binding.height === undefined ? undefined : { width: binding.width ?? 80, height: binding.height ?? 80 };
+      openViewPopup(near, binding.popup!, binding.name ?? binding.popup![0]!, size);
+    },
     rememberTab: (tab) => recentTabs.remember(tab),
   };
 
