@@ -48,7 +48,11 @@ export async function runClaude(args: string[], options: { pick: boolean; prompt
           return session?.transcript.mode;
         },
         wokenAgain: () => void (session ? undefined : showIfJob()),
-        onStart: (start) => void (started ??= start),
+        onStart: (start) => {
+          if (started || session) return false;
+          started = start;
+          return true;
+        },
       });
     }
     if (inbox) choice = await wakeAndChoose(renderer, inbox, () => started);
@@ -346,7 +350,7 @@ async function openInbox(
     session?: () => string | undefined;
     cycleMode?: () => string | undefined;
     wokenAgain?: () => void;
-    onStart?: (start: Start) => void;
+    onStart?: (start: Start) => boolean;
   } = {},
 ): Promise<Inbox | undefined> {
   const { KOMUX_SOCKET: control, KOMUX_PANE_ID: pane, KOMUX_TAB_DIR: dir } = process.env;
@@ -356,6 +360,7 @@ async function openInbox(
   rmSync(path, { force: true });
   const buffers = new WeakMap<object, string>();
   let wake: (() => void) | undefined;
+  let startWaiting = false;
   const server = Bun.listen({
     unix: path,
     socket: {
@@ -365,9 +370,10 @@ async function openInbox(
         for (const line of lines) {
           try {
             const { text, wake: woken, commands, cycleMode, start } = JSON.parse(line) as { text?: unknown; wake?: unknown; commands?: unknown; cycleMode?: unknown; start?: { resume?: unknown; prompt?: unknown } };
-            if (start && typeof start === "object" && wake) {
-              options.onStart?.({ ...(typeof start.resume === "string" ? { resume: start.resume } : {}), ...(typeof start.prompt === "string" && start.prompt.trim() ? { prompt: start.prompt } : {}) });
-              wake();
+            if (start && typeof start === "object" && options.onStart) {
+              const taken = options.onStart({ ...(typeof start.resume === "string" ? { resume: start.resume } : {}), ...(typeof start.prompt === "string" && start.prompt.trim() ? { prompt: start.prompt } : {}) });
+              if (taken && wake) wake();
+              else if (taken) startWaiting = true;
             } else if (cycleMode === true) socket.write(`${JSON.stringify({ mode: options.cycleMode?.() })}\n`);
             else if (commands === true) socket.write(`${JSON.stringify({ commands: options.commands?.() ?? [], mode: options.mode?.(), session: options.session?.() })}\n`);
             else if (woken === true) (wake ?? options.wokenAgain)?.();
@@ -401,6 +407,11 @@ async function openInbox(
   }
   const nextWake = () =>
     new Promise<void>((resolve) => {
+      if (startWaiting) {
+        startWaiting = false;
+        resolve();
+        return;
+      }
       wake = () => {
         wake = undefined;
         resolve();
