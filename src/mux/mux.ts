@@ -417,7 +417,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
         const name = workspace.paneNames.get(paneId) ?? workspace.jobStatus(paneId)?.name;
         return [{ paneId, tabId: tab.id, state, ...(asking.has(paneId) ? { asking: true } : {}), ...(name ? { name } : {}), ...(paneSessions.has(paneId) ? { sessionId: paneSessions.get(paneId) } : {}) }];
       }),
-      jobs: workspace.jobs.filter((job) => tabIds.has(job.tabId)).map((job) => ({ id: job.id, tabId: job.tabId, name: job.name, state: job.state, code: job.code, agent: agentJobs.has(job.id) })),
+      jobs: workspace.jobs.filter((job) => tabIds.has(job.tabId)).map((job) => ({ id: job.id, tabId: job.tabId, name: job.name, state: job.state, code: job.code, agent: agentJobs.has(job.id), ...(job.startedBy === undefined ? {} : { startedBy: job.startedBy }) })),
       toasts: workspace.toasts().flatMap((toast): ToastFacts[] => {
         if (toast.kind === "reply" && !toast.brief) return [{ kind: "reply", id: toast.id, tabId: toast.tab.id }];
         if (toast.kind === "job" && toast.job.state === "failed") return [{ kind: "job", id: toast.job.id, tabId: toast.tab.id }];

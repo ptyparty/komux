@@ -5,7 +5,7 @@ import type { AgentState, JobState } from "./workspace.ts";
 
 export type TabFacts = { id: number; number: number; name: string; dir: string; labels?: Record<string, string>; layout?: string; args?: Record<string, string> };
 export type AgentFacts = { paneId: PaneId; tabId: number; state: AgentState | "idle"; asking?: boolean; name?: string; sessionId?: string };
-export type JobFacts = { id: PaneId; tabId: number; name: string; state: JobState; code?: number | null; agent: boolean };
+export type JobFacts = { id: PaneId; tabId: number; name: string; state: JobState; code?: number | null; agent: boolean; startedBy?: PaneId };
 export type ToastFacts = { kind: "reply" | "job"; id: PaneId; tabId: number };
 export type World = { tabs: TabFacts[]; focus: { tabId: number; paneId: PaneId } | undefined; agents: AgentFacts[]; jobs: JobFacts[]; toasts: ToastFacts[] };
 
