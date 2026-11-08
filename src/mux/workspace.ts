@@ -937,6 +937,12 @@ export class Workspace {
       return;
     }
     const key = commandPopupKey(this.tab.id, binding.popup!);
+    const shown = this.popup;
+    if (shown?.kind === "view" && shown.key === key) {
+      this.host.destroy(shown.id);
+      this.popupExited(shown.id);
+      return;
+    }
     if (!this.raiseViewPopup(key)) this.host.openBinding(this.focused, binding, key);
   }
 

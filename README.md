@@ -276,6 +276,8 @@ export default {
 };
 ```
 
+Pressing a popup's key again while the popup is in front closes it. If the popup is open but behind another one, the key brings it back to the front.
+
 A mode puts a group of keys behind one key on the leader. Ctrl Space and the mode's key show its card, and each key in it runs once and goes back to normal; Esc leaves without running anything. Modes are listed under More on the Ctrl Space card, and can't take a key the leader already uses.
 
 ```ts

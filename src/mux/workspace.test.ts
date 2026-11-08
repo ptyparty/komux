@@ -2143,12 +2143,29 @@ describe("review fixes", () => {
     workspace.openViewPopup(7, "your move", 1, undefined, host.bindingKeys[0]);
     workspace.hideViewPopup(7);
     press(workspace, "alt+m");
+    workspace.hideViewPopup(7);
     press(workspace, "ctrl+space", "m", "m");
     expect(host.bindings).toHaveLength(1);
     expect(workspace.popup?.id).toBe(7);
     workspace.popupExited(7);
     press(workspace, "alt+m");
     expect(host.bindings).toHaveLength(2);
+  });
+
+  test("pressing a config key again while its popup is in front closes the popup", () => {
+    const host = new FakeHost();
+    const config = configSchema.parse({ keys: [{ key: "alt+m", popup: ["ponpoko", "deal"] }], plugins: [{ name: "ponpoko", modes: [{ key: "m", name: "ponpoko", keys: [{ key: "m", popup: ["ponpoko", "deal"] }] }] }] });
+    const workspace = new Workspace(host, "/home", config);
+    press(workspace, "alt+m");
+    workspace.openViewPopup(7, "your move", 1, undefined, host.bindingKeys[0]);
+    press(workspace, "alt+m");
+    expect(host.destroyed).toContain(7);
+    expect(workspace.popup).toBeUndefined();
+    press(workspace, "alt+m");
+    workspace.openViewPopup(8, "your move", 1, undefined, host.bindingKeys[1]);
+    press(workspace, "ctrl+space", "m", "m");
+    expect(host.destroyed).toContain(8);
+    expect(workspace.popup).toBeUndefined();
   });
 
   test("a config mode is one key on the leader, and each of its keys runs once and leaves it", () => {
