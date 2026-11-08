@@ -16,13 +16,16 @@ export type Answer = string | number | boolean | string[] | null;
 
 export type FormResult =
   | { status: "submitted"; values: Record<string, Answer> }
-  | { status: "cancelled" };
+  | { status: "cancelled" }
+  | { status: "deferred"; reason?: string };
 
 export type Focusable =
   | { kind: "input"; element: InputElement }
   | { kind: "other"; element: ChoiceElement }
   | { kind: "note"; element: SlidesElement }
-  | { kind: "submit" };
+  | { kind: "submit" }
+  | { kind: "defer" }
+  | { kind: "deferReason" };
 
 export type FormAction =
   | { type: "next" }
@@ -36,6 +39,7 @@ export type FormAction =
   | { type: "setText"; id: string; value: string }
   | { type: "setOtherText"; id: string; value: string }
   | { type: "setNote"; id: string; value: string }
+  | { type: "setDeferReason"; value: string }
   | { type: "submit" }
   | { type: "cancel" };
 
@@ -64,6 +68,8 @@ export class FormController {
   private readonly choices = new Map<string, ChoiceState>();
   private readonly slideshows = new Map<string, SlidesState>();
   private focusKey: string;
+  deferring = false;
+  deferReason = "";
 
   constructor(spec: FormSpec) {
     this.spec = spec;
@@ -93,6 +99,8 @@ export class FormController {
       if (element.type === "slides" && takesNotes(element)) focusables.push({ kind: "note", element });
     }
     focusables.push({ kind: "submit" });
+    if (this.spec.deferrable) focusables.push({ kind: "defer" });
+    if (this.deferring) focusables.push({ kind: "deferReason" });
     return focusables;
   }
 
@@ -189,9 +197,13 @@ export class FormController {
         state.notes[state.index] = action.value;
         return;
       }
+      case "setDeferReason":
+        this.deferReason = action.value;
+        return;
       case "submit":
-        return this.submit();
+        return this.focused().kind === "deferReason" ? this.defer() : this.submit();
       case "cancel":
+        if (this.focused().kind === "deferReason") return this.stopDeferring();
         this.result = { status: "cancelled" };
         return;
     }
@@ -232,6 +244,7 @@ export class FormController {
     const index = focusables.findIndex((focusable) => focusKeyOf(focusable) === focusKeyOf(this.focused()));
     const target = focusables[Math.min(Math.max(index + delta, 0), focusables.length - 1)];
     if (target) this.focusKey = focusKeyOf(target);
+    if (this.deferring && target?.kind !== "deferReason") this.deferring = false;
   }
 
   private vertical(delta: number): void {
@@ -272,10 +285,27 @@ export class FormController {
   private activate(): void {
     const focused = this.focused();
     if (focused.kind === "submit") return this.submit();
+    if (focused.kind === "defer") return this.startDeferring();
+    if (focused.kind === "deferReason") return this.defer();
     if (focused.kind === "input" && focused.element.type === "choice" && !focused.element.multi) {
       this.selectAtCursor(focused.element);
     }
     this.moveFocus(1);
+  }
+
+  private startDeferring(): void {
+    this.deferring = true;
+    this.focusKey = focusKeyOf({ kind: "deferReason" });
+  }
+
+  private stopDeferring(): void {
+    this.deferring = false;
+    this.focusKey = focusKeyOf({ kind: "defer" });
+  }
+
+  private defer(): void {
+    const reason = this.deferReason.trim();
+    this.result = reason ? { status: "deferred", reason } : { status: "deferred" };
   }
 
   private selectAtCursor(element: ChoiceElement): void {
@@ -300,7 +330,7 @@ export class FormController {
 
   private submit(): void {
     this.errors = this.validate();
-    const firstError = this.focusables().find((focusable) => focusable.kind !== "submit" && this.errors.has(focusable.element.id));
+    const firstError = this.focusables().find((focusable) => "element" in focusable && this.errors.has(focusable.element.id));
     if (firstError) {
       this.focusKey = focusKeyOf(firstError);
       return;
@@ -350,5 +380,5 @@ function decimalPlaces(value: number): number {
 }
 
 function focusKeyOf(focusable: Focusable): string {
-  return focusable.kind === "submit" ? "submit" : `${focusable.kind}:${focusable.element.id}`;
+  return "element" in focusable ? `${focusable.kind}:${focusable.element.id}` : focusable.kind;
 }

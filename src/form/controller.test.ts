@@ -11,7 +11,7 @@ function run(controller: FormController, ...actions: FormAction["type"][]): void
 }
 
 function focusName(focusable: Focusable): string {
-  return focusable.kind === "submit" ? "submit" : `${focusable.kind}:${focusable.element.id}`;
+  return "element" in focusable ? `${focusable.kind}:${focusable.element.id}` : focusable.kind;
 }
 
 describe("FormController", () => {
@@ -50,6 +50,38 @@ describe("FormController", () => {
     expect(focusName(plain.focused())).toBe("submit");
     run(plain, "submit");
     expect(plain.result).toEqual({ status: "submitted", values: { shots: null } });
+  });
+
+  test("not right now puts the form off, with an optional reason", () => {
+    const plain = controllerFor([{ type: "text", id: "name", label: "Name" }]);
+    run(plain, "next", "next");
+    expect(focusName(plain.focused())).toBe("submit");
+    const form = new FormController(parseFormSpec({ title: "Test", deferrable: true, elements: [{ type: "text", id: "name", label: "Name", required: true }] }));
+    run(form, "next", "next");
+    expect(focusName(form.focused())).toBe("defer");
+    run(form, "activate");
+    expect(focusName(form.focused())).toBe("deferReason");
+    expect(form.result).toBeNull();
+    form.dispatch({ type: "setDeferReason", value: "  in a meeting " });
+    run(form, "activate");
+    expect(form.result).toEqual({ status: "deferred", reason: "in a meeting" });
+    const silent = new FormController(parseFormSpec({ title: "Test", deferrable: true, elements: [{ type: "confirm", id: "ok", label: "OK?" }] }));
+    run(silent, "next", "next", "activate", "activate");
+    expect(silent.result).toEqual({ status: "deferred" });
+  });
+
+  test("in the reason box, Esc goes back to the button, moving away closes it, and ^S sends the deferral", () => {
+    const form = new FormController(parseFormSpec({ title: "Test", deferrable: true, elements: [{ type: "confirm", id: "ok", label: "OK?" }] }));
+    run(form, "next", "next", "activate", "cancel");
+    expect(form.result).toBeNull();
+    expect(focusName(form.focused())).toBe("defer");
+    expect(form.focusables().map(focusName)).not.toContain("deferReason");
+    run(form, "activate", "previous");
+    expect(form.focusables().map(focusName)).not.toContain("deferReason");
+    run(form, "next", "activate");
+    form.dispatch({ type: "setDeferReason", value: "later today" });
+    run(form, "submit");
+    expect(form.result).toEqual({ status: "deferred", reason: "later today" });
   });
 
   test("cancel", () => {

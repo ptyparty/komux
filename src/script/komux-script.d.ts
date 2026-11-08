@@ -11,7 +11,7 @@ type PanelElement =
 
 type PanelEvent = { type: "select"; id: string; value: string } | { type: "key"; key: string };
 
-type AskResult = { status: "submitted"; values: Record<string, Json> } | { status: "cancelled" };
+type AskResult = { status: "submitted"; values: Record<string, Json> } | { status: "cancelled" } | { status: "deferred"; reason?: string };
 
 type KomuxState = {
   shown: boolean;
@@ -31,7 +31,7 @@ declare const komux: {
   toast(text: string): void;
   reply(value: Json): void;
   exit(value?: Json): void;
-  ask(form: { title: string; description?: string; elements: object[]; submitLabel?: string }): Promise<AskResult>;
+  ask(form: { title: string; description?: string; elements: object[]; submitLabel?: string; deferrable?: boolean }): Promise<AskResult>;
   state(): Promise<KomuxState>;
   onEvent(handler: (event: PanelEvent) => void): void;
   onMessage(handler: (message: any) => void): void;

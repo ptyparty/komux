@@ -88,7 +88,7 @@ Usage:
       Claude Code Stop hook to run with asyncRewake: waits until a form this pane opened is answered
       or dismissed, then exits 2 with the answer so Claude wakes up and reads it.
 
-Results are JSON: {"status":"submitted","values":{...}}, {"status":"cancelled"}, or {"status":"pending"}.`;
+Results are JSON: {"status":"submitted","values":{...}}, {"status":"cancelled"}, {"status":"deferred","reason"?:"..."}, or {"status":"pending"}.`;
 
 class UsageError extends Error {}
 

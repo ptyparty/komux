@@ -64,6 +64,7 @@ A choice gets an "Other…" free-text option unless `"other": false`. When the u
 
 - `{"status":"submitted","values":{...}}`: one entry per element that was visible at submit time. Hidden elements are left out, so check for a key before reading it.
 - `{"status":"cancelled"}`: the user pressed Esc or closed the pane. Treat this as "no". Do not reopen the same form; ask in chat what they want instead.
+- `{"status":"deferred","reason":"..."}`: the user picked "Not right now", and `reason`, when present, says why. Nothing is wrong and they have not said no. Don't ask again now, in a form or in chat. Carry on with work that doesn't need the answer, or end your turn, and bring the question up again once they're ready for it. The deferred ask is closed, so `komux open` won't show it again; ask it afresh. A form you can't continue without can set `"deferrable": false` to leave the button off. The `ask` tool shows the button unless you do; `komux ask` from the CLI shows it only with `"deferrable": true`.
 - `{"status":"pending"}`: not answered yet. Call `wait` again. When the ask's host was `none`, tell the user the command from `message`, or `komux open <id>`, so they can answer.
 
 ## Writing good forms

@@ -93,10 +93,10 @@ export class AskStore {
     return asks.filter((entry) => entry.status.status === "pending").map((entry) => entry.meta);
   }
 
-  async claimUnseen(owner: AskOwner): Promise<UnseenResult[]> {
+  async claimUnseen(owner: AskOwner, wanted: (result: FormResult) => boolean = () => true): Promise<UnseenResult[]> {
     const unseen: UnseenResult[] = [];
     for (const { meta, status } of await this.existing((meta) => sameOwner(meta.owner, owner))) {
-      if (status.status !== "pending" && this.claim(meta.id)) unseen.push({ meta, result: status });
+      if (status.status !== "pending" && wanted(status) && this.claim(meta.id)) unseen.push({ meta, result: status });
     }
     return unseen.sort((a, b) => a.meta.createdAt.localeCompare(b.meta.createdAt));
   }

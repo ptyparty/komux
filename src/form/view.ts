@@ -48,6 +48,8 @@ class FormView {
   private readonly views: Map<Element, ElementView>;
   private readonly scroll: ScrollBoxRenderable;
   private readonly submit: TextRenderable;
+  private readonly defer: TextRenderable;
+  private readonly deferReason: InputRenderable;
   private readonly hints: TextRenderable;
 
   constructor(
@@ -71,8 +73,20 @@ class FormView {
     }
     this.views = new Map(controller.spec.elements.map((element) => [element, this.createView(element)]));
     for (const view of this.views.values()) this.scroll.add(view.root);
+    const actions = new BoxRenderable(renderer, { flexDirection: "row", gap: 2 });
     this.submit = new TextRenderable(renderer, { id: "submit" });
-    this.scroll.add(this.submit);
+    this.defer = new TextRenderable(renderer, { id: "defer", visible: Boolean(controller.spec.deferrable) });
+    actions.add(this.submit);
+    actions.add(this.defer);
+    this.scroll.add(actions);
+    this.deferReason = new InputRenderable(renderer, {
+      id: "defer-reason",
+      placeholder: "Why not now? (optional)",
+      focusedBackgroundColor: theme.surface2,
+      visible: false,
+      onContentChange: () => controller.dispatch({ type: "setDeferReason", value: this.deferReason.plainText }),
+    });
+    this.scroll.add(this.deferReason);
     this.hints = new TextRenderable(renderer, { fg: palette.muted, flexShrink: 0 });
     for (const box of [this.scroll.content, this.scroll.viewport]) {
       const recalculate = box.onSizeChange;
@@ -114,6 +128,7 @@ class FormView {
     if (!action) return this.page(key);
     key.preventDefault();
     for (const view of this.views.values()) view.flush();
+    if (this.deferReason.plainText !== this.controller.deferReason) this.controller.dispatch({ type: "setDeferReason", value: this.deferReason.plainText });
     this.controller.dispatch(action);
     this.sync();
     this.scrollToFocus();
@@ -132,10 +147,10 @@ class FormView {
   }
 
   private syncSubmit(): void {
-    const label = ` ${this.controller.spec.submitLabel ?? "Submit"} `;
-    const focused = this.controller.focused().kind === "submit";
-    this.submit.content = styled([focused ? bold(fg(theme.background)(label)) : fg(palette.accent)(`[${label}]`)]);
-    this.submit.bg = focused ? palette.accent : undefined;
+    const focused = this.controller.focused().kind;
+    syncButton(this.submit, this.controller.spec.submitLabel ?? "Submit", focused === "submit");
+    syncButton(this.defer, "Not right now", focused === "defer" || focused === "deferReason");
+    this.deferReason.visible = this.controller.deferring;
   }
 
   private syncFocus(): void {
@@ -144,12 +159,13 @@ class FormView {
     for (const view of this.views.values()) {
       for (const candidate of view.editors()) if (candidate !== editor) candidate.blur();
     }
+    if (editor !== this.deferReason) this.deferReason.blur();
     editor?.focus();
   }
 
   private scrollToFocus(): void {
     const focused = this.controller.focused();
-    const id = focused.kind === "submit" ? "submit" : elementRootId(focused.element.id);
+    const id = "element" in focused ? elementRootId(focused.element.id) : focused.kind === "deferReason" ? "defer-reason" : focused.kind;
     this.scroll.scrollChildIntoView(id);
   }
 
@@ -158,7 +174,8 @@ class FormView {
   }
 
   private editorFor(focusable: Focusable): Editor | undefined {
-    if (focusable.kind === "submit") return undefined;
+    if (focusable.kind === "deferReason") return this.deferReason;
+    if (!("element" in focusable)) return undefined;
     return this.views.get(focusable.element)?.editorFor(focusable);
   }
 
@@ -182,6 +199,12 @@ class FormView {
         return new ChoiceView(this.renderer, this.controller, element, this.changed);
     }
   }
+}
+
+function syncButton(button: TextRenderable, text: string, focused: boolean): void {
+  const label = ` ${text} `;
+  button.content = styled([focused ? bold(fg(theme.background)(label)) : fg(palette.accent)(`[${label}]`)]);
+  button.bg = focused ? palette.accent : undefined;
 }
 
 function editorPosition(editor: Editor | undefined): EditorPosition | undefined {

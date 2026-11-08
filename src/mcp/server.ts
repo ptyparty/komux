@@ -15,7 +15,7 @@ const askDescription = `Ask the user questions in a form that pops up in their t
 
 Use it when you need a decision, a choice between options, or several answers at once. It is quicker for the user than typing replies in chat. Element types: text, confirm (yes/no), choice (single or multi, with an automatic "Other" free-text option), number (bounded), note (display-only text), markdown (display-only, rendered markdown for longer content), image (display-only, a picture such as a screenshot shown from a file path), and slides (several images the user pages through one at a time, leaving an optional note on each; the answer is one note per slide). Use \`when\` to show an element only when an earlier answer calls for it.
 
-The result is {"status":"submitted","values":{...}} with one entry per visible element, {"status":"cancelled"} if the user dismissed the form, or {"status":"pending"} if they have not answered within wait_seconds. When it is pending, call the wait tool with the returned id.`;
+The result is {"status":"submitted","values":{...}} with one entry per visible element, {"status":"cancelled"} if the user dismissed the form, {"status":"deferred","reason"?:"..."} if they chose "Not right now" (set "deferrable": false on a form that can't wait to leave that button off), or {"status":"pending"} if they have not answered within wait_seconds. When it is pending, call the wait tool with the returned id.`;
 
 const scriptDescription = `Run a TypeScript program in a sandbox inside the user's komux, as a job in your tab. Use it for UI a single form can't do: a live checklist or progress panel you update as you work, a multi-step wizard, a table the user picks rows from.
 
@@ -48,7 +48,7 @@ export function createServer(store: AskStore = new AskStore()): McpServer {
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
     async ({ form, wait_seconds, host }) => {
-      const outcome = await ask(store, form, host, wait_seconds * 1000);
+      const outcome = await ask(store, { ...form, deferrable: form.deferrable ?? true }, host, wait_seconds * 1000);
       return reply({ id: outcome.id, host: outcome.launch.host, message: outcome.launch.message, ...outcome.status });
     },
   );

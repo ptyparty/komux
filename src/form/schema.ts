@@ -112,6 +112,7 @@ export const formSpec = z
     description: z.string().optional(),
     elements: z.array(element).min(1),
     submitLabel: z.string().optional(),
+    deferrable: z.boolean().optional(),
   })
   .superRefine(validateForm);
 

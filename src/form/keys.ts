@@ -41,6 +41,7 @@ export function keyToAction(key: Key, focused: Focusable, position?: EditorPosit
 
 export function keyHints(focused: Focusable): KeyHint[] {
   const hints = focusHints(focused);
+  if (focused.kind === "deferReason") return [...hints, { keys: "Esc", action: "back" }];
   const move = hints.some((hint) => hint.keys === "Tab") ? [] : [{ keys: "Tab/⇧Tab", action: "move" }];
   return [...hints, ...move, { keys: "^S", action: "submit" }, { keys: "Esc", action: "cancel" }];
 }
@@ -54,6 +55,8 @@ function modeKeys(focused: Focusable, position?: EditorPosition): Record<string,
 
 function focusHints(focused: Focusable): KeyHint[] {
   if (focused.kind === "submit") return [{ keys: "Enter", action: "submit" }];
+  if (focused.kind === "defer") return [{ keys: "Enter", action: "answer later" }];
+  if (focused.kind === "deferReason") return [{ keys: "type", action: "why (optional)" }, { keys: "Enter", action: "send" }];
   if (focused.kind === "other") return [{ keys: "type", action: "other answer" }];
   if (focused.kind === "note") return [{ keys: "type", action: "note on this slide" }, { keys: "↑", action: "back to the slide" }];
   switch (focused.element.type) {
@@ -75,7 +78,7 @@ function focusHints(focused: Focusable): KeyHint[] {
 }
 
 export function isEditing(focused: Focusable): boolean {
-  return focused.kind === "other" || focused.kind === "note" || (focused.kind === "input" && focused.element.type === "text");
+  return focused.kind === "other" || focused.kind === "note" || focused.kind === "deferReason" || (focused.kind === "input" && focused.element.type === "text");
 }
 
 function multilineEdges(position: EditorPosition | undefined): Record<string, FormAction> {

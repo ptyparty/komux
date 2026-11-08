@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AskStore } from "../ask/store.ts";
 import { serveControl, type ControlRequest } from "../mux/control.ts";
-import { backgroundAsJob, sessionForEvent, waitForAnswers, permissionDecision, permissionForm, planDecision, planForm, questionAnswers, questionForm, runHook, stateForEvent, type ClaudeQuestion, type PermissionInput } from "./hook.ts";
+import { backgroundAsJob, sessionForEvent, waitForAnswers, permissionDecision, permissionForm, planDecision, planForm, questionAnswers, questionForm, runHook, stateForEvent, unseenNotice, type ClaudeQuestion, type PermissionInput } from "./hook.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "komux-hook-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -225,5 +225,14 @@ describe("komux hook", () => {
     expect(backgroundAsJob({ ...background, tool_input: { command: "komux job run -- make", run_in_background: true } }, ["komux"])).toBeUndefined();
     const wrapped = { ...bash, tool_input: { command: "komux job run --wait --name x -- bash -c ls" } };
     expect(permissionForm(wrapped, ["komux"]).elements[1]).toMatchObject({ options: [{ value: "allow" }, { value: "deny" }] });
+  });
+});
+
+describe("unseenNotice", () => {
+  test("tells Claude a put-off form should not be asked again now", () => {
+    const meta = { id: "a-00000000", title: "Deploy", createdAt: "", host: "komux" };
+    const notice = unseenNotice([{ meta, result: { status: "deferred", reason: "busy" } }, { meta, result: { status: "cancelled" } }]);
+    expect(notice).toContain(`"Deploy" (a-00000000) was put off: the user will answer later ("busy"). Don't ask it again now.`);
+    expect(notice).toContain("was dismissed without an answer");
   });
 });

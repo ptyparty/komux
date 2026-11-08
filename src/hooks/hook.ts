@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ask, askOwner } from "../ask/ask.ts";
 import { selfCommand, shellQuote } from "../ask/hosts.ts";
 import { AskStore, type AskOwner, type AskStatus, type UnseenResult } from "../ask/store.ts";
+import type { FormResult } from "../form/controller.ts";
 import type { FormSpec } from "../form/schema.ts";
 import { ControlError, sendControl, type ControlRequest, type QuietToast } from "../mux/control.ts";
 import { attachedPaneEnv } from "./attached.ts";
@@ -344,7 +345,7 @@ export async function waitForAnswers(env: Record<string, string | undefined>, in
   try {
     for (;;) {
       const open = await store.pending(pane);
-      const notice = unseenNotice(await store.claimUnseen(pane));
+      const notice = unseenNotice(await store.claimUnseen(pane, (result) => result.status !== "deferred"));
       if (notice) return notice;
       if (open.length === 0 || Date.now() >= deadline || !ownsLock(lock)) return undefined;
       await Bun.sleep(pollMs);
@@ -373,12 +374,19 @@ function ownsLock(lock: string): boolean {
 
 export function unseenNotice(unseen: UnseenResult[]): string | undefined {
   if (unseen.length === 0) return undefined;
-  const lines = unseen.map(({ meta, result }) =>
-    result.status === "submitted"
-      ? `- "${meta.title}" (${meta.id}) was answered: ${JSON.stringify(result.values)}`
-      : `- "${meta.title}" (${meta.id}) was dismissed without an answer. Its popup is closed.`,
-  );
+  const lines = unseen.map(({ meta, result }) => `- "${meta.title}" (${meta.id}) ${unseenOutcome(result)}`);
   return ["komux forms you opened were closed since you last checked on them:", ...lines].join("\n");
+}
+
+function unseenOutcome(result: FormResult): string {
+  switch (result.status) {
+    case "submitted":
+      return `was answered: ${JSON.stringify(result.values)}`;
+    case "cancelled":
+      return "was dismissed without an answer. Its popup is closed.";
+    case "deferred":
+      return `was put off: the user will answer later${result.reason ? ` (${JSON.stringify(result.reason)})` : ""}. Don't ask it again now.`;
+  }
 }
 
 export function summarizeToolInput(toolInput: Record<string, unknown>): string {

@@ -19,9 +19,9 @@ afterEach(async () => {
   setup = undefined;
 });
 
-async function open(elements: unknown[], images: ImageOutput = { enabled: false, write: () => {} }): Promise<{ setup: TestRendererSetup; result: Promise<FormResult> }> {
+async function open(elements: unknown[], images: ImageOutput = { enabled: false, write: () => {} }, spec: object = {}): Promise<{ setup: TestRendererSetup; result: Promise<FormResult> }> {
   setup = await createTestRenderer({ width: 60, height: 24 });
-  const controller = new FormController(parseFormSpec({ title: "Deploy", description: "Ship it?", elements }));
+  const controller = new FormController(parseFormSpec({ title: "Deploy", description: "Ship it?", elements, ...spec }));
   const result = runForm(setup.renderer, controller, images);
   await setup.renderOnce();
   return { setup, result };
@@ -171,6 +171,18 @@ describe("form view", () => {
     const { setup, result } = await open([{ type: "text", id: "name", label: "Name" }]);
     setup.mockInput.pressEscape();
     expect(await result).toEqual({ status: "cancelled" });
+  });
+
+  test("not right now asks why and sends the reason with Enter", async () => {
+    const { setup, result } = await open([{ type: "confirm", id: "ok", label: "OK?" }], undefined, { deferrable: true });
+    expect(await renderedWith(setup, "Not right now")).toContain("[ Submit ]  [ Not right now ]");
+    setup.mockInput.pressTab();
+    setup.mockInput.pressTab();
+    setup.mockInput.pressEnter();
+    await renderedWith(setup, "Why not now?");
+    await setup.mockInput.typeText("busy");
+    setup.mockInput.pressEnter();
+    expect(await result).toEqual({ status: "deferred", reason: "busy" });
   });
 
   test("shows an image's caption and path when the terminal cannot draw it", async () => {

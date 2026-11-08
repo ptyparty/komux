@@ -61,6 +61,14 @@ describe("AskStore", () => {
     expect(await store.status(open.id)).toEqual({ status: "pending" });
   });
 
+  test("results left out of a claim stay unseen for the next one", async () => {
+    const owner = { socket: "/run/komux.sock", paneId: 5 };
+    const later = await store.create(spec, "komux", owner);
+    await store.complete(later.id, { status: "deferred" });
+    expect(await store.claimUnseen(owner, (result) => result.status !== "deferred")).toEqual([]);
+    expect((await store.claimUnseen(owner)).map(({ meta }) => meta.id)).toEqual([later.id]);
+  });
+
   test("results from an earlier run of the session stay with it", async () => {
     const before = await store.create(spec, "komux", { socket: "/run/komux.sock", paneId: 3, server: "first" });
     await store.complete(before.id, { status: "submitted", values: {} });
