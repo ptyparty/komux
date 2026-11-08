@@ -554,13 +554,14 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
               workspace.paneExited(closing);
               refresh();
             }, 0);
+          const tabId = workspace.tabOf(paneId)!.id;
           refresh();
-          return { ok: true };
+          return { ok: true, result: { tabId, tabDir: tabDirs.tabDir(tabId) } };
         }
         case "tab.focus": {
           if (!workspace.focusTab(request.params.tabId)) return { ok: false, error: `no tab ${request.params.tabId}` };
           refresh();
-          return { ok: true };
+          return { ok: true, result: { tabId: request.params.tabId, tabDir: tabDirs.tabDir(request.params.tabId) } };
         }
         case "pane.zoom": {
           const { paneId, zoomed } = request.params;
@@ -585,7 +586,7 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
           const target = "target" in request.params ? request.params.target : { repo: request.params.repo };
           const error = workspace.openProject(target, true, { layout, args });
           refresh();
-          return error ? { ok: false, error } : { ok: true };
+          return error ? { ok: false, error } : { ok: true, result: { tabId: workspace.tab.id, tabDir: tabDirs.tabDir(workspace.tab.id) } };
         }
         case "claude.start": {
           const { target, resume, prompt, layout, args } = request.params;
