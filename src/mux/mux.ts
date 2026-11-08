@@ -197,7 +197,10 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     const { KOMUX_PANE_ID: _pane, TERM: _term, COLORTERM: _colors, ...inherited } = callerEnv ?? {};
     const env: Record<string, string> = { ...inherited, ...paneEnv };
     if (renderer.capabilities?.kitty_graphics) env.KOMUX_KITTY_GRAPHICS = "1";
-    if (tabId !== undefined) env.KOMUX_TAB_DIR = tabDirs.tabDir(tabId);
+    if (tabId !== undefined) {
+      env.KOMUX_TAB_DIR = tabDirs.tabDir(tabId);
+      env.KOMUX_TAB_ID = String(tabId);
+    }
     if (job) env.KOMUX_JOB = String(id);
     panes.set(id, new Pane(renderer, id, { cwd, command, env, holdOnExit, holdOnFailure, frameless, job, scrollbackBytes }, scheduler, {
       onHeld: () => refresh(),

@@ -133,7 +133,7 @@ Every project opened with `ide` gets an editor, a shell, and a [native Claude](#
 - **Labels:** `labels: { braid: "sc-{story}" }` tags the layout's tabs for other programs, such as ponpoko, which read them from the event stream. `{project}` and the args are filled in the same way.
 - **Repos:** `komux project --repo ptyparty/komux` opens the clone under `projects.roots` whose path ends in `ptyparty/komux`.
 - **Startup:** `startup: ["home"]` opens those named tabs when a session starts, instead of a plain tab.
-- **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab. A job can put its socket there for the tab's panes to find.
+- **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab, and `KOMUX_TAB_ID`, the tab's id in the event stream. A job can put its socket there for the tab's panes to find.
 - **Without jobs:** Alt+Enter in the tab switcher opens a project without starting its layout's jobs. Ctrl Space j s starts them later.
 - **Earlier configs:** layouts used to take `services`; rename them to `jobs`.
 
