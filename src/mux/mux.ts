@@ -24,7 +24,7 @@ import { theme } from "./theme.ts";
 import { Helpers } from "./helpers.ts";
 import { Tray, trayWidgets } from "./tray.ts";
 import { MuxView } from "./view.ts";
-import { draftKey, Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
+import { commandPopupKey, draftKey, Workspace, type PaneHost, type PopupSize } from "./workspace.ts";
 
 const readBudgetMs = 6;
 const readWindowMs = 16;
@@ -360,9 +360,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
     },
     sendKeys: (id, data) => panes.get(id)?.type(data),
     recentTabs: () => recentTabs.list(),
-    openBinding: (near, binding) => {
+    openBinding: (near, binding, key) => {
       const size = binding.width === undefined && binding.height === undefined ? undefined : { width: binding.width ?? 80, height: binding.height ?? 80 };
-      openViewPopup(near, binding.popup!, binding.name ?? binding.popup![0]!, size);
+      openViewPopup(near, binding.popup!, binding.name ?? binding.popup![0]!, size, false, key);
     },
     rememberTab: (tab) => recentTabs.remember(tab),
   };
@@ -454,7 +454,9 @@ export function createMux(renderer: CliRenderer, options: MuxOptions): Mux {
       workspace.message = `The ${widget.name} widget has nothing to open`;
       return;
     }
-    openViewPopup(workspace.focused, widget.open, widget.name, undefined);
+    const key = commandPopupKey(workspace.tab.id, widget.open);
+    if (workspace.raiseViewPopup(key)) refresh();
+    else openViewPopup(workspace.focused, widget.open, widget.name, undefined, false, key);
   }
 
   tray.start();

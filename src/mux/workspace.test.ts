@@ -121,8 +121,10 @@ class FakeHost implements PaneHost {
     this.sent.push([id, data]);
   }
   bindings: [number, KeyBinding][] = [];
-  openBinding(near: number, binding: KeyBinding): void {
+  bindingKeys: string[] = [];
+  openBinding(near: number, binding: KeyBinding, key: string): void {
     this.bindings.push([near, binding]);
+    this.bindingKeys.push(key);
   }
   recent: RecentTab[] = [];
   recentTabs(): RecentTab[] {
@@ -2131,6 +2133,22 @@ describe("review fixes", () => {
     expect(host.bindings).toEqual([[1, { key: "alt+m", popup: ["ponpoko", "deal"] }]]);
     press(workspace, "alt+shift+t");
     expect(workspace.tabs.map((tab) => tab.name)).toContain("htop");
+  });
+
+  test("a config key whose popup is already open in the tab shows that popup again rather than opening another", () => {
+    const host = new FakeHost();
+    const config = configSchema.parse({ keys: [{ key: "alt+m", popup: ["ponpoko", "deal"] }], plugins: [{ name: "ponpoko", modes: [{ key: "m", name: "ponpoko", keys: [{ key: "m", popup: ["ponpoko", "deal"] }] }] }] });
+    const workspace = new Workspace(host, "/home", config);
+    press(workspace, "alt+m");
+    workspace.openViewPopup(7, "your move", 1, undefined, host.bindingKeys[0]);
+    workspace.hideViewPopup(7);
+    press(workspace, "alt+m");
+    press(workspace, "ctrl+space", "m", "m");
+    expect(host.bindings).toHaveLength(1);
+    expect(workspace.popup?.id).toBe(7);
+    workspace.popupExited(7);
+    press(workspace, "alt+m");
+    expect(host.bindings).toHaveLength(2);
   });
 
   test("a config mode is one key on the leader, and each of its keys runs once and leaves it", () => {

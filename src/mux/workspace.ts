@@ -98,7 +98,7 @@ export interface PaneHost {
   askKeys(id: PaneId): void;
   sendKeys(id: PaneId, data: string): void;
   recentTabs(): RecentTab[];
-  openBinding(near: PaneId, binding: KeyBinding): void;
+  openBinding(near: PaneId, binding: KeyBinding, key: string): void;
   rememberTab(tab: RecentTab): void;
 }
 
@@ -936,7 +936,8 @@ export class Workspace {
       this.openTab(this.host.cwd(this.focused), { name, layout: { jobs: [], layout: { command: binding.tab, name } } });
       return;
     }
-    this.host.openBinding(this.focused, binding);
+    const key = commandPopupKey(this.tab.id, binding.popup!);
+    if (!this.raiseViewPopup(key)) this.host.openBinding(this.focused, binding, key);
   }
 
   private lockedKey(key: InputKey): boolean {
@@ -1621,6 +1622,10 @@ function showKeyName(key: Key): string {
 
 function isPrintable(sequence: string): boolean {
   return sequence.length > 0 && [...sequence].every((char) => char >= " " && char !== "\x7f");
+}
+
+export function commandPopupKey(tabId: number, command: string[]): string {
+  return `command:${tabId}:${JSON.stringify(command)}`;
 }
 
 export function draftKey(target: PaneId): string {
