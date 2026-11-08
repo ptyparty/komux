@@ -43,7 +43,7 @@ describe("worldChanges", () => {
   });
 
   test("reports the layout and args a tab was opened with", () => {
-    const review: World = { ...world, tabs: [{ ...tab, layout: "pr-review", args: { pr: "540", braid: "sc-1235" } }] };
+    const review: World = { ...world, tabs: [{ ...tab, layout: "pr-review", args: { pr: "540", strand: "sc-1235" } }] };
     expect(worldChanges(world, review)).toEqual([{ type: "tab.changed", tab: review.tabs[0]! }]);
   });
 

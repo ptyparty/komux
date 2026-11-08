@@ -61,7 +61,7 @@ const layoutEntry: z.ZodType<LayoutEntry, unknown> = z
     labels: z
       .record(z.string(), z.string())
       .optional()
-      .describe("Labels sent with the tab's events for other programs to read, such as { braid: \"pr-{pr}\" }; {project} and {arg} are filled in"),
+      .describe("Labels sent with the tab's events for other programs to read, such as { strand: \"pr-{pr}\" }; {project} and {arg} are filled in"),
     services: z.undefined({ error: "services are now jobs: rename `services:` to `jobs:`" }).optional(),
   })
   .transform(({ jobs, drawer, args, name, labels, services: _services, ...layout }) => ({

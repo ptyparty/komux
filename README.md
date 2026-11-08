@@ -130,7 +130,7 @@ Every project opened with `ide` gets an editor, a shell, and a [native Claude](#
 
 - **Named tabs:** `tabs: { home: { layout: "ide", cwd: "~/work" } }` defines a tab with its own layout and working directory. Named tabs appear in the tab switcher and work with `komux project`, so a closed one can be reopened, which also restarts its jobs.
 - **Args:** a layout with `args: ["pr"]` is opened by `komux project --layout pr-review --arg pr=12`, which fills `{pr}` into its commands, job names, drawer, and tab `name`, along with `{project}`. `name: "{project} #{pr}"` gives each PR its own tab, so the same args switch back to it. Such a layout can't be a project's or named tab's default.
-- **Labels:** `labels: { braid: "sc-{story}" }` tags the layout's tabs for other programs, such as ponpoko, which read them from the event stream. `{project}` and the args are filled in the same way.
+- **Labels:** `labels: { strand: "sc-{story}" }` tags the layout's tabs for other programs, such as ponpoko, which read them from the event stream. `{project}` and the args are filled in the same way.
 - **Repos:** `komux project --repo ptyparty/komux` opens the clone under `projects.roots` whose path ends in `ptyparty/komux`.
 - **Startup:** `startup: ["home"]` opens those named tabs when a session starts, instead of a plain tab.
 - **Shared directory:** every pane and job in a tab gets `KOMUX_TAB_DIR`, a private directory for that tab, and `KOMUX_TAB_ID`, the tab's id in the event stream. A job can put its socket there for the tab's panes to find.

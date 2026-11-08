@@ -123,10 +123,10 @@ describe("config", () => {
   });
 
   test("a layout's labels are filled in from its args and project", () => {
-    const config = configSchema.parse({ layouts: { story: { args: ["story"], labels: { braid: "sc-{story}", repo: "{project}" }, row: [{}] } } });
-    expect(config.layouts.story!.labels).toEqual({ braid: "sc-{story}", repo: "{project}" });
+    const config = configSchema.parse({ layouts: { story: { args: ["story"], labels: { strand: "sc-{story}", repo: "{project}" }, row: [{}] } } });
+    expect(config.layouts.story!.labels).toEqual({ strand: "sc-{story}", repo: "{project}" });
     const opened = projectTab(config, { name: "penny", dir: "/p", layout: "story" }, { story: "1234" });
-    expect("layout" in opened && opened.layout?.labels).toEqual({ braid: "sc-1234", repo: "penny" });
+    expect("layout" in opened && opened.layout?.labels).toEqual({ strand: "sc-1234", repo: "penny" });
   });
 
   test("bad jobs, drawers, and args, old services, and unknown project layouts are errors", async () => {
